@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 from collections import namedtuple
 import hashlib
 import re
+import requests
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from support.common import str_to_date, Attribute
@@ -13,13 +14,13 @@ from util.htmldocument import HtmlDocument
 from util.timer import Timer
 
 
-class Series(namedtuple('Series', ['id', 'title', 'original_title', 'image', 'icon', 'poster', 'country', 'year',
+class Series(namedtuple('Series', ['id', 'web_id', 'title', 'original_title', 'image', 'icon', 'poster', 'country', 'year',
                                    'genres', 'about', 'actors', 'producers', 'writers', 'plot', 'seasons_count',
                                    'episodes_count'])):
     pass
 
 
-class Episode(namedtuple('Episode', ['series_id', 'series_title', 'season_number', 'episode_number', 'episode_title',
+class Episode(namedtuple('Episode', ['series_id', 'series_title', 'web_id', 'season_number', 'episode_number', 'episode_title',
                                      'original_title', 'release_date', 'icon', 'poster', 'image'])):
     def __eq__(self, other):
         return self.series_id == other.series_id and \
@@ -39,11 +40,11 @@ class Episode(namedtuple('Episode', ['series_id', 'series_title', 'season_number
 
     @property
     def is_complete_season(self):
-        return self.episode_number == "99"
+        return self.episode_number == 999
 
     @property
     def is_multi_episode(self):
-        return "-" in self.episode_number
+        return False #"-" in self.episode_number
 
     @property
     def episode_numbers(self):
@@ -73,6 +74,20 @@ class LostFilmScraper(AbstractScraper):
     BASE_URL = "http://www.lostfilm.tv"
     LOGIN_URL = "http://login1.bogi.ru/login.php"
     BLOCKED_MESSAGE = "Контент недоступен на территории Российской Федерации"
+
+    def series_web_ids_dict(self):
+
+        f = open('series_id', 'r')
+        contents = f.readlines()
+        web_ids = []
+        ids = []
+        for l in contents:
+            ids.append(int(l.split(': ')[0]))
+            web_id = l.split(': ')[1][:-1]
+            web_ids.append(web_id)
+        f.close()
+
+        return dict(zip(ids, web_ids))
 
     def __init__(self, login, password, cookie_jar=None, xrequests_session=None, series_cache=None, max_workers=10,
                  anonymized_urls=None):
@@ -162,11 +177,12 @@ class LostFilmScraper(AbstractScraper):
         cached_details = self.series_cache.keys()
         not_cached_ids = [_id for _id in series_ids if _id not in cached_details]
         results = dict((_id, self.series_cache[_id]) for _id in series_ids if _id in cached_details)
+        temp_zip = self.series_web_ids_dict()
         if not_cached_ids:
             with Timer(logger=self.log,
                        name="Bulk fetching series with IDs " + ", ".join(str(i) for i in not_cached_ids)):
                 with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-                    futures = [executor.submit(self.get_series_info, _id) for _id in not_cached_ids]
+                    futures = [executor.submit(self.get_series_info, _id, temp_zip[_id]) for _id in not_cached_ids]
                     for future in as_completed(futures):
                         result = future.result()
                         self.series_cache[result.id] = results[result.id] = result
@@ -176,38 +192,103 @@ class LostFilmScraper(AbstractScraper):
         return self.get_series_bulk([series_id])[series_id]
 
     def get_all_series_ids(self):
-        doc = self.fetch(self.BASE_URL + "/serials.php")
-        mid = doc.find('div', {'class': 'mid'})
-        links = mid.find('a', {'href': '/browse\.php\?cat=.+?', 'class': 'bb_a'}).attrs('href')
-        ids = [int(l[16:].lstrip("_")) for l in links]
-        return ids
+        # skip = 0
+        # ids = []
+        # # web_ids = []
+        # prev_ids = []
+        # condition = True
+        # while condition:
+        #     r = requests.post("http://www.lostfilm.tv/ajaxik.php", params={'type': 'search', 's': '2', 't': '0', 'act': 'serial', 'o': '%s' % skip})
+        #     ids_incr = [int(r1['img'].split("/")[4]) for r1 in r.json()['data']]
+        #     # web_ids_incr = [r1['title_orig'] for r1 in r.json()['data']]
+        #     if prev_ids == ids_incr:
+        #         condition = False
+        #     else:
+        #         skip += 10
+        #     prev_ids = ids_incr
+        #     ids += ids_incr
+        #     # web_ids += web_ids_incr
+        # # web_ids = [re.sub(' ', '_', re.sub('[^a-zA-Z0-9 \n\.]', '', wid)) for wid in web_ids]
+        f = open('series_id', 'r')
+        contents = f.readlines()
+        ids = []
+        for l in contents:
+            ids.append(int(l.split(': ')[0]))
+        f.close()
 
-    def _get_series_doc(self, series_id):
-        return self.fetch(self.BASE_URL + "/browse.php", {'cat': series_id})
+        return ids #, web_ids
+
+    def _get_series_doc(self, web_id):
+        return self.fetch(self.BASE_URL + "/series/%s"%web_id)
 
     def get_series_episodes(self, series_id):
-        doc = self._get_series_doc(series_id)
+
+        web_id = self.series_web_ids_dict()[series_id]
+
+        doc = self._get_series_doc(web_id + '/seasons')
         episodes = []
         with Timer(logger=self.log, name='Parsing episodes of series with ID %d' % series_id):
-            body = doc.find('div', {'class': 'mid'})
-            series_title, original_title = parse_title(body.find('h1').first.text)
-            image = self.BASE_URL + body.find('img').attr('src')
-            icon = image.replace('/posters/poster_', '/icons/cat_')
-            episode_divs = body.find('div', {'class': 't_row.*?'})
+            title = doc.find('div', {'class': 'title-block'})
+            series_title = title.find('div', {'class': 'title-ru'}).text
+            original_title = title.find('div', {'class': 'title-en'}).text
+            image = None
+            icon = None
+
             series_poster = None
-            for ep in episode_divs:
-                title_td = ep.find('td', {'class': 't_episode_title'})
-                episode_title, orig_title = parse_title(title_td.text)
-                onclick = title_td.attr('onClick')
-                release_date = ep.find('span', {'class': 'micro'}).find('span')[0].text
-                release_date = str_to_date(release_date, '%d.%m.%Y %H:%M') if release_date else None
-                _, season_number, episode_number = parse_onclick(onclick)
-                poster = poster_url(original_title, season_number)
-                if not series_poster:
-                    series_poster = poster
-                episode = Episode(series_id, series_title, season_number, episode_number, episode_title,
-                                  orig_title, release_date, icon, poster, image)
-                episodes.append(episode)
+
+            episodes_data = doc.find('div', {'class': 'series-block'})
+            seasons = episodes_data.find('div', {'class': 'serie-block'})
+            for s in seasons:
+                full_season = s.find('div', {'class': 'movie-details-block'})
+                if len(full_season.strings) != 0:
+                    release_date = '01.01.2000'
+                    if len(release_date) > 10:
+                        release_date = str_to_date(release_date, '%d.%m.%Y %H:%M')
+                    elif len(release_date) > 1:
+                        release_date = str_to_date(release_date, '%d.%m.%Y')
+                    else:
+                        release_date = None
+                    onclick = str(full_season.find('div', {'class': 'external-btn'}).attrs('onClick'))
+                    full_season_indicator, season_number, episode_number = parse_onclick(onclick)
+                    episode_title = '%d Сезон Полностью' % season_number
+                    orig_title = 'Full Season %d'% season_number
+                    poster = poster_url(original_title, season_number)
+                    if not series_poster:
+                        series_poster = poster
+                    episode = Episode(series_id, series_title, web_id, season_number, episode_number, episode_title,
+                                      orig_title, release_date, icon, poster, image)
+                    if full_season_indicator != 0:
+                        episodes.append(episode)
+            #
+            # for s in seasons:
+                episodes_table = s.find('table', {'class': 'movie-parts-list'})
+                episode_dates = [str(d.split(':')[-1])[1:] for d in
+                                 episodes_table.find('td', {'class': 'delta'}).strings]
+                onclick = episodes_table.find('div', {'class': 'external-btn'}).attrs('onClick')
+                titles = episodes_table.find('td', {'class': 'gamma'})
+                orig_titles = [str(t) for t in titles.find('span')]
+                titles = [t.split('\n')[0] for t in titles.strings]
+                if len(onclick) < len(titles):
+                    del episode_dates[0], titles[0], orig_titles[0]
+                for i in range(len(episode_dates)):
+                    release_date = episode_dates[i]
+                    if len(release_date) > 10:
+                        release_date = str_to_date(release_date, '%d.%m.%Y %H:%M')
+                    elif len(release_date) > 1:
+                        release_date = str_to_date(release_date, '%d.%m.%Y')
+                    else:
+                        release_date = None
+                    full_season_indicator, season_number, episode_number = parse_onclick(onclick[i])
+                    episode_title = titles[i]
+                    orig_title = orig_titles[i]
+                    poster = poster_url(original_title, season_number)
+                    if not series_poster:
+                        series_poster = poster
+                    episode = Episode(series_id, series_title, web_id, season_number, episode_number, episode_title,
+                                      orig_title, release_date, icon, poster, image)
+                    if full_season_indicator != 0:
+                        episodes.append(episode)
+
             self.log.info("Got %d episode(s) successfully" % (len(episodes)))
             self.log.debug(repr(episodes).decode("unicode-escape"))
         return episodes
@@ -228,14 +309,32 @@ class LostFilmScraper(AbstractScraper):
                     results[_id] = future.result()
         return results
 
-    def get_series_info(self, series_id):
-        doc = self._get_series_doc(series_id)
-        with Timer(logger=self.log, name='Parsing series info with ID %d' % series_id):
-            body = doc.find('div', {'class': 'mid'})
-            series_title, original_title = parse_title(body.find('h1').first.text)
-            image = self.BASE_URL + body.find('img').attr('src')
-            icon = image.replace('/posters/poster_', '/icons/cat_')
-            info = body.find('div').first.text.replace("\xa0", "")
+    def get_series_info(self, series_id, web_id):
+
+        if web_id == '11.22.63':
+            web_id = '11-22-63'
+        doc = self._get_series_doc(web_id)
+        with Timer(logger=self.log, name='Parsing series info with ID %s' % web_id):
+            title = doc.find('h1', {'class': 'header'})
+            series_title = title.find('div', {'class': 'title-ru'}).text
+            original_title = title.find('div', {'class': 'title-en'}).text
+            image = doc.find('div', {'class': 'main_poster'}).attr('style')
+            if image != None:
+                image = image.split("'")[1]
+                image = 'http:' + image
+                icon = image.replace('/Posters/poster', '/Posters/image')
+            else:
+                icon = image
+            info_and_plot = doc.find('div', {'class': 'text-block description'}).strings
+            if len(info_and_plot) != 0:
+                info_and_plot = info_and_plot[0]
+            # res = re.search('Описание: (.+)\r\n', info_and_plot)
+            # info = res.group(1) if res else None
+            # res = re.search('Сюжет: (.+)\r\n', info_and_plot)
+            # plot = res.group(1) if res else None
+            # about = info
+            about = plot = None
+            info = ' '
 
             res = re.search('Страна: (.+)\r\n', info)
             country = res.group(1) if res else None
@@ -243,24 +342,20 @@ class LostFilmScraper(AbstractScraper):
             year = res.group(1) if res else None
             res = re.search('Жанр: (.+)\r\n', info)
             genres = res.group(1).split(', ') if res else None
-            res = re.search('Количество сезонов: (.+)\r\n', info)
-            seasons_count = int(res.group(1)) if res else 0
-            res = re.search('О сериале[^\r\n]+\s*(.+?)($|\r\n)', info, re.S | re.M)
-            about = res.group(1) if res else None
             res = re.search('Актеры:\s*(.+?)($|\r\n)', info, re.S | re.M)
             actors = [parse_title(t) for t in res.group(1).split(', ')] if res else None
             res = re.search('Режиссеры:\s*(.+?)($|\r\n)', info, re.S | re.M)
             producers = res.group(1).split(', ') if res else None
             res = re.search('Сценаристы:\s*(.+?)($|\r\n)', info, re.S | re.M)
             writers = res.group(1).split(', ') if res else None
-            res = re.search('Сюжет:\s*(.+?)($|\r\n)', info, re.S | re.M)
-            plot = res.group(1) if res else None
 
-            episodes_count = len(body.find('div', {'class': 't_row.*?'})) - \
-                len(body.find('label', {'title': 'Сезон полностью'}))
+            counter = self._get_series_doc('%s/seasons' % web_id)
+            body = counter.find('div', {'class': 'series-block'})
+            episodes_count = len(body.find('td', {'class': 'zeta'}))
+            seasons_count = len(body.find('div', {'class': 'movie-details-block'}))
 
             poster = poster_url(original_title, seasons_count)
-            series = Series(series_id, series_title, original_title, image, icon, poster, country, year,
+            series = Series(series_id, web_id, series_title, original_title, image, icon, poster, country, year,
                             genres, about, actors, producers, writers, plot, seasons_count, episodes_count)
 
             self.log.info("Parsed '%s' series info successfully" % series_title)
@@ -270,44 +365,77 @@ class LostFilmScraper(AbstractScraper):
 
     def browse_episodes(self, skip=0):
         self.ensure_authorized()
-        doc = self.fetch(self.BASE_URL + "/browse.php", {'o': skip})
+        page = (skip or 0) / 10 + 1
+        doc = self.fetch(self.BASE_URL + "/new/page_%s" % page)
         with Timer(logger=self.log, name='Parsing episodes list'):
-            body = doc.find('div', {'class': 'content_body'})
-            series_titles = body.find('span', {'style': 'font-family:arial;.*?'}).strings
-            titles = body.find('span', {'class': 'torrent_title'}).strings
-            episode_titles, original_titles = zip(*[parse_title(t) for t in titles])
-            release_dates = body.find('b').strings[1::3]
-            release_dates = [str_to_date(d, '%d.%m.%Y %H:%M') for d in release_dates]
-            selected_page = body.find('span', {'class': 'd_pages_link_selected'}).text
-            last_page = body.find('a', {'class': 'd_pages_link'}).last.text
+            body = doc.find('div', {'class': 'content history'})
+            series_titles = body.find('div', {'class': 'name-ru'}).strings
+            web_ids =  body.find('div', {'class': 'name-en'}).strings
+            web_ids = [re.sub(' ', '_', re.sub('[^a-zA-Z0-9 \n\.]', '', wid)) for wid in web_ids]
+            episode_titles = body.find('div', {'class': 'alpha'}).strings[::2]
+            original_titles = body.find('div', {'class': 'beta'}).strings[::2]
+            release_dates = body.find('div', {'class': 'alpha'}).strings[1::2]
+            release_dates = [rd.split(' ')[-1] for rd in release_dates]
+            release_dates = [str_to_date(d, '%d.%m.%Y') for d in release_dates]
+            paging = doc.find('div', {'class': 'pagging-pane'})
+            selected_page = paging.find('a', {'class': 'item active'}).text
+            last_page = paging.find('a', {'class': 'item'}).last.text
             self.has_more = int(selected_page) < int(last_page)
-            icons = body.find('img', {'class': 'category_icon'}).attrs('src')
-            onclicks = body.find('a', {'href': 'javascript:{};'}).attrs('onClick')
-            series_ids, season_numbers, episode_numbers = zip(*[parse_onclick(s or "") for s in onclicks])
-            posters = [poster_url(i[0][18:-5], i[1]) for i in zip(icons, season_numbers)]
-            icons = [self.BASE_URL + url for url in icons]
-            images = [url.replace('/icons/cat_', '/posters/poster_') for url in icons]
-            data = zip(series_ids, series_titles, season_numbers,
+            icons = body.find('img', {'class': 'thumb'}).attrs('src')
+            series_ids = [int(i.split('/')[4]) for i in icons]
+            se = body.find('div', {'class': 'left-part'}).strings
+            season_numbers = [int(s.split(' ')[0]) for s in se]
+            episode_numbers = [int(s.split(' ')[2]) for s in se]
+            # self.log.info('%s'%str(type(episode_numbers[0])))
+
+            icons = ['http:' + url for url in icons]
+            posters = [url.replace('/Posters/image', '/Posters/poster') for url in icons]
+            images = [url.replace('/Posters/image', '/Posters/poster') for url in icons]
+
+            data = zip(series_ids, series_titles, web_ids, season_numbers,
                        episode_numbers, episode_titles, original_titles, release_dates, icons, posters, images)
             episodes = [Episode(*e) for e in data if e[0]]
             self.log.info("Got %d episode(s) successfully" % (len(episodes)))
             self.log.debug(repr(episodes).decode("unicode-escape"))
         return episodes
-
+    #
+    # def get_torrent_links(self, series_id, season_number, episode_number):
+    #     doc = self.fetch('http://old.lostfilm.tv/nrdr2.php', {
+    #         'c': str(series_id),
+    #         's': str(season_number),
+    #         'e': str(episode_number)
+    #     })
+    #     links = []
+    #     with Timer(logger=self.log, name='Parsing torrent links'):
+    #         urls = doc.find('a', {'style': 'font-size:18px;.*?'}).attrs('href')
+    #         table = doc.find('table')
+    #         qualities = table.find('img', {'src': 'img/search_.+?'}).attrs('src')
+    #         qualities = [s[11:-4] for s in qualities]
+    #         sizes = re.findall('Размер: (.+)\.', table.text)
+    #         for url, qua, size in zip(urls, qualities, sizes):
+    #             links.append(TorrentLink(Quality.find(qua), url, parse_size(size)))
+    #         self.log.info("Got %d link(s) successfully" % (len(links)))
+    #         self.log.info(repr(links).decode("unicode-escape"))
+    #     return links
+    #
     def get_torrent_links(self, series_id, season_number, episode_number):
-        doc = self.fetch(self.BASE_URL + '/nrdr.php', {
+        doc = self.fetch(self.BASE_URL + '/v_search.php', {
             'c': series_id,
             's': season_number,
             'e': episode_number
         })
         links = []
         with Timer(logger=self.log, name='Parsing torrent links'):
-            urls = doc.find('a', {'style': 'font-size:18px;.*?'}).attrs('href')
-            table = doc.find('table')
-            qualities = table.find('img', {'src': 'img/search_.+?'}).attrs('src')
-            qualities = [s[11:-4] for s in qualities]
-            sizes = re.findall('Размер: (.+)\.', table.text)
+            urls = doc.find('div', {'class': 'inner-box--link main'})
+            urls = [str(u.find('a').attrs('href')[0]) for u in urls]
+            table = doc.find('div', {'class': 'inner-box--list'})
+            qualities = table.find('div', {'class': 'inner-box--label'}).strings
+            qualities = [str(q).lower() for q in qualities]
+            sizes = table.find('div', {'class': 'inner-box--desc'}).strings
+            sizes = [q.split(':')[2] for q in sizes]
+            sizes = [q.rsplit(None, 1)[0] for q in sizes]
             for url, qua, size in zip(urls, qualities, sizes):
+                self.log.info("%s"%type(Quality.find(qua)))
                 links.append(TorrentLink(Quality.find(qua), url, parse_size(size)))
             self.log.info("Got %d link(s) successfully" % (len(links)))
             self.log.info(repr(links).decode("unicode-escape"))
@@ -320,11 +448,12 @@ def parse_title(t):
 
 
 def parse_onclick(s):
-    res = re.findall("ShowAllReleases\('([^']+)','([^']+)','([^']+)'\)", s)
+    res = re.findall("PlayEpisode\('([^']+)','([^']+)','([^']+)'\)", s)
     if res:
         series_id, season, episode = res[0]
         series_id = int(series_id.lstrip("_"))
         season = int(season.split('.')[0])
+        episode = int(episode)
         return series_id, season, episode
     else:
         return 0, 0, ""

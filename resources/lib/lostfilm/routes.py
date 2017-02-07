@@ -10,6 +10,7 @@ from lostfilm.common import select_torrent_link, get_scraper, itemify_episodes, 
     itemify_series, BATCH_SERIES_COUNT, BATCH_EPISODES_COUNT, library_items, update_library_menu, \
     library_new_episodes, NEW_LIBRARY_ITEM_COLOR, check_last_episode, check_first_start
 from support.torrent import Torrent
+import requests, re, os.path
 
 
 @plugin.route('/browse_season/<series>/<season>')
@@ -17,7 +18,7 @@ def browse_season(series, season):
     plugin.set_content('episodes')
     select_quality = plugin.request.arg('select_quality')
     series = get_scraper().get_series_cached(series)
-    link = select_torrent_link(series.id, season, "99", select_quality)
+    link = select_torrent_link(series.id, season, 999, select_quality)
     if not link:
         return []
     torrent = get_torrent(link.url)
@@ -109,6 +110,37 @@ def remove_from_library(series_id):
 
 @plugin.route('/')
 def index():
+
+    def fetch_series_id_db():
+        url = "http://www.lostfilm.tv/ajaxik.php"
+        skip = 0
+        ids = []
+        web_ids = []
+        prev_ids = []
+        condition = True
+        while condition:
+            r = requests.post(url, params={'type': 'search', 's': '2', 't': '0', 'act': 'serial', 'o': '%s' % skip})
+            ids_incr = [int(r1['img'].split("/")[4]) for r1 in r.json()['data']]
+            web_ids_incr = [r1['title_orig'] for r1 in r.json()['data']]
+            if prev_ids == ids_incr:
+                condition = False
+            else:
+                skip += 10
+            prev_ids = ids_incr
+            ids += ids_incr
+            web_ids += web_ids_incr
+        web_ids = [re.sub('&', 'and', (re.sub(' ', '_', re.sub('[^a-zA-Z0-9-& \n\.]', '', wid)))) for wid in web_ids]
+        for i in range(len(web_ids)):
+            if web_ids[i] == '11.22.63':
+                web_ids[i] = '11-22-63'
+        f = open('series_id', 'w')
+        for i in range(len(ids)):
+            f.write("%d: %s\n" % (ids[i], web_ids[i]))
+        f.close()
+
+    if not(os.path.isfile('series_id')):
+        fetch_series_id_db()
+
     plugin.set_content('episodes')
     skip = plugin.request.arg('skip')
     per_page = plugin.get_setting('per-page', int)
