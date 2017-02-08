@@ -72,22 +72,9 @@ TorrentLink = namedtuple('TorrentLink', ['quality', 'url', 'size'])
 
 class LostFilmScraper(AbstractScraper):
     BASE_URL = "http://www.lostfilm.tv"
-    LOGIN_URL = "http://login1.bogi.ru/login.php"
+    # LOGIN_URL = "http://login1.bogi.ru/login.php"
+    LOGIN_URL = "http://www.lostfilm.tv/ajaxik.php"
     BLOCKED_MESSAGE = "Контент недоступен на территории Российской Федерации"
-
-    def series_web_ids_dict(self):
-
-        f = open('series_id', 'r')
-        contents = f.readlines()
-        web_ids = []
-        ids = []
-        for l in contents:
-            ids.append(int(l.split(': ')[0]))
-            web_id = l.split(': ')[1][:-1]
-            web_ids.append(web_id)
-        f.close()
-
-        return dict(zip(ids, web_ids))
 
     def __init__(self, login, password, cookie_jar=None, xrequests_session=None, series_cache=None, max_workers=10,
                  anonymized_urls=None):
@@ -102,6 +89,23 @@ class LostFilmScraper(AbstractScraper):
         self.session.headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.116 Safari/537.36'
         self.session.add_proxy_need_check(self._check_content_is_blocked)
         self.session.add_proxy_validator(self._validate_proxy)
+        self.series_web_ids_dict = self.load_series_web_ids_dict()
+        self.auth = None
+
+
+    def load_series_web_ids_dict(self):
+
+        f = open('series_id', 'r')
+        contents = f.readlines()
+        web_ids = []
+        ids = []
+        for l in contents:
+            ids.append(int(l.split(': ')[0]))
+            web_id = l.split(': ')[1][:-1]
+            web_ids.append(web_id)
+        f.close()
+
+        return dict(zip(ids, web_ids))
 
     # noinspection PyUnusedLocal
     def _validate_proxy(self, proxy, request, response):
@@ -130,10 +134,24 @@ class LostFilmScraper(AbstractScraper):
             encoding = 'windows-1251'
         return HtmlDocument.from_string(self.response.content, encoding)
 
+    # def authorize(self):
+    #     with Timer(logger=self.log, name='Authorization'):
+    #         self.fetch(self.LOGIN_URL,
+    #                          params={'referer': 'http://www.lostfilm.tv/'},
+    #                          data={'act': 'users', 'type': 'login', 'mail': self.login, 'pass': self.password, 'rem': 1})
+
+    #         self.auth = self.authorization_hash
+    #         if not self.authorized():
+    #             raise ScraperError(32003, "Authorization failed", check_settings=True)
+    #         else:
+    #             self.log.info("Authorization is successful with lf_session id %s"
+    #                 %self.session.cookies['lf_session'])
+
+
     def authorize(self):
         with Timer(logger=self.log, name='Authorization'):
-            self.fetch(self.BASE_URL + '/browse.php')
-            doc = self.fetch(self.LOGIN_URL,
+            self.fetch('http://old.lostfilm.tv/browse.php')
+            doc = self.fetch('http://login1.bogi.ru/login.php',
                              params={'referer': 'http://www.lostfilm.tv/'},
                              data={'login': self.login, 'password': self.password})
             action_url = doc.find('form').attr('action')
@@ -151,6 +169,17 @@ class LostFilmScraper(AbstractScraper):
     @property
     def authorization_hash(self):
         return hashlib.md5(self.login + self.password).hexdigest()
+
+    # def authorized(self):
+    #     cookies = self.session.cookies
+    #     if self.auth != self.authorization_hash:
+    #         try:
+    #             cookies.clear('.lostfilm.tv')
+    #             self.authorize()
+    #         except KeyError:
+    #             pass
+    #         return False
+    #     return True
 
     def authorized(self):
         cookies = self.session.cookies
@@ -177,12 +206,11 @@ class LostFilmScraper(AbstractScraper):
         cached_details = self.series_cache.keys()
         not_cached_ids = [_id for _id in series_ids if _id not in cached_details]
         results = dict((_id, self.series_cache[_id]) for _id in series_ids if _id in cached_details)
-        temp_zip = self.series_web_ids_dict()
         if not_cached_ids:
             with Timer(logger=self.log,
                        name="Bulk fetching series with IDs " + ", ".join(str(i) for i in not_cached_ids)):
                 with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-                    futures = [executor.submit(self.get_series_info, _id, temp_zip[_id]) for _id in not_cached_ids]
+                    futures = [executor.submit(self.get_series_info, _id, self.series_web_ids_dict[_id]) for _id in not_cached_ids]
                     for future in as_completed(futures):
                         result = future.result()
                         self.series_cache[result.id] = results[result.id] = result
@@ -216,14 +244,14 @@ class LostFilmScraper(AbstractScraper):
             ids.append(int(l.split(': ')[0]))
         f.close()
 
-        return ids #, web_ids
+        return ids # self.series_web_ids_dict.keys() #, web_ids
 
     def _get_series_doc(self, web_id):
         return self.fetch(self.BASE_URL + "/series/%s"%web_id)
 
     def get_series_episodes(self, series_id):
 
-        web_id = self.series_web_ids_dict()[series_id]
+        web_id = self.series_web_ids_dict[series_id]
 
         doc = self._get_series_doc(web_id + '/seasons')
         episodes = []
@@ -259,8 +287,6 @@ class LostFilmScraper(AbstractScraper):
                                       orig_title, release_date, icon, poster, image)
                     if full_season_indicator != 0:
                         episodes.append(episode)
-            #
-            # for s in seasons:
                 episodes_table = s.find('table', {'class': 'movie-parts-list'})
                 episode_dates = [str(d.split(':')[-1])[1:] for d in
                                  episodes_table.find('td', {'class': 'delta'}).strings]
@@ -281,7 +307,8 @@ class LostFilmScraper(AbstractScraper):
                     full_season_indicator, season_number, episode_number = parse_onclick(onclick[i])
                     episode_title = titles[i]
                     orig_title = orig_titles[i]
-                    poster = poster_url(original_title, season_number)
+
+                    poster = 'http://static.lostfilm.tv/Images/%s/Posters/poster.jpg'%web_id #poster_url(original_title, season_number)
                     if not series_poster:
                         series_poster = poster
                     episode = Episode(series_id, series_title, web_id, season_number, episode_number, episode_title,
@@ -391,6 +418,8 @@ class LostFilmScraper(AbstractScraper):
             icons = ['http:' + url for url in icons]
             posters = [url.replace('/Posters/image', '/Posters/poster') for url in icons]
             images = [url.replace('/Posters/image', '/Posters/poster') for url in icons]
+            for i in range(len(release_dates)):
+                icons[i] = icons[i].replace('/Posters/image', '/Posters/e_%d_%d'%(season_numbers[i], episode_numbers[i]))
 
             data = zip(series_ids, series_titles, web_ids, season_numbers,
                        episode_numbers, episode_titles, original_titles, release_dates, icons, posters, images)
@@ -398,48 +427,49 @@ class LostFilmScraper(AbstractScraper):
             self.log.info("Got %d episode(s) successfully" % (len(episodes)))
             self.log.debug(repr(episodes).decode("unicode-escape"))
         return episodes
-    #
-    # def get_torrent_links(self, series_id, season_number, episode_number):
-    #     doc = self.fetch('http://old.lostfilm.tv/nrdr2.php', {
-    #         'c': str(series_id),
-    #         's': str(season_number),
-    #         'e': str(episode_number)
-    #     })
-    #     links = []
-    #     with Timer(logger=self.log, name='Parsing torrent links'):
-    #         urls = doc.find('a', {'style': 'font-size:18px;.*?'}).attrs('href')
-    #         table = doc.find('table')
-    #         qualities = table.find('img', {'src': 'img/search_.+?'}).attrs('src')
-    #         qualities = [s[11:-4] for s in qualities]
-    #         sizes = re.findall('Размер: (.+)\.', table.text)
-    #         for url, qua, size in zip(urls, qualities, sizes):
-    #             links.append(TorrentLink(Quality.find(qua), url, parse_size(size)))
-    #         self.log.info("Got %d link(s) successfully" % (len(links)))
-    #         self.log.info(repr(links).decode("unicode-escape"))
-    #     return links
-    #
+
     def get_torrent_links(self, series_id, season_number, episode_number):
-        doc = self.fetch(self.BASE_URL + '/v_search.php', {
+        doc = self.fetch('http://old.lostfilm.tv/nrdr.php', {
             'c': series_id,
             's': season_number,
             'e': episode_number
         })
         links = []
         with Timer(logger=self.log, name='Parsing torrent links'):
-            urls = doc.find('div', {'class': 'inner-box--link main'})
-            urls = [str(u.find('a').attrs('href')[0]) for u in urls]
-            table = doc.find('div', {'class': 'inner-box--list'})
-            qualities = table.find('div', {'class': 'inner-box--label'}).strings
-            qualities = [str(q).lower() for q in qualities]
-            sizes = table.find('div', {'class': 'inner-box--desc'}).strings
-            sizes = [q.split(':')[2] for q in sizes]
-            sizes = [q.rsplit(None, 1)[0] for q in sizes]
+            urls = doc.find('a', {'style': 'font-size:18px;.*?'}).attrs('href')
+            table = doc.find('table')
+            qualities = table.find('img', {'src': 'img/search_.+?'}).attrs('src')
+            qualities = [s[11:-4] for s in qualities]
+            sizes = re.findall('Размер: (.+)\.', table.text)
             for url, qua, size in zip(urls, qualities, sizes):
-                self.log.info("%s"%type(Quality.find(qua)))
                 links.append(TorrentLink(Quality.find(qua), url, parse_size(size)))
             self.log.info("Got %d link(s) successfully" % (len(links)))
             self.log.info(repr(links).decode("unicode-escape"))
         return links
+
+    
+    # def get_torrent_links(self, series_id, season_number, episode_number):
+    #     doc = self.fetch(self.BASE_URL + '/v_search.php', {
+    #         'c': series_id,
+    #         's': season_number,
+    #         'e': episode_number
+    #     })
+    #     links = []
+    #     with Timer(logger=self.log, name='Parsing torrent links'):
+    #         urls = doc.find('div', {'class': 'inner-box--link main'})
+    #         urls = [str(u.find('a').attrs('href')[0]) for u in urls]
+    #         table = doc.find('div', {'class': 'inner-box--list'})
+    #         qualities = table.find('div', {'class': 'inner-box--label'}).strings
+    #         qualities = [str(q).lower() for q in qualities]
+    #         sizes = table.find('div', {'class': 'inner-box--desc'}).strings
+    #         sizes = [q.split(':')[2] for q in sizes]
+    #         sizes = [q.rsplit(None, 1)[0] for q in sizes]
+    #         for url, qua, size in zip(urls, qualities, sizes):
+    #             self.log.info("%s"%type(Quality.find(qua)))
+    #             links.append(TorrentLink(Quality.find(qua), url, parse_size(size)))
+    #         self.log.info("Got %d link(s) successfully" % (len(links)))
+    #         self.log.info(repr(links).decode("unicode-escape"))
+    #     return links
 
 
 def parse_title(t):
