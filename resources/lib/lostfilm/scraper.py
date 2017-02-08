@@ -75,7 +75,6 @@ TorrentLink = namedtuple('TorrentLink', ['quality', 'url', 'size'])
 
 class LostFilmScraper(AbstractScraper):
     BASE_URL = "http://www.lostfilm.tv"
-    # LOGIN_URL = "http://login1.bogi.ru/login.php"
     LOGIN_URL = "http://www.lostfilm.tv/ajaxik.php"
     BLOCKED_MESSAGE = "Контент недоступен на территории Российской Федерации"
 
@@ -83,7 +82,6 @@ class LostFilmScraper(AbstractScraper):
                  anonymized_urls=None):
         super(LostFilmScraper, self).__init__(xrequests_session, cookie_jar)
         self.series_cache = series_cache if series_cache is not None else {}
-        # self.series_ids_cache = series_ids_cache if series_ids_cache is not None else {}
         self.series_ids_db = series_ids_db
         self.max_workers = max_workers
         self.response = None
@@ -271,31 +269,13 @@ class LostFilmScraper(AbstractScraper):
         return self.get_series_bulk([series_id])[series_id]
 
     def get_all_series_ids(self):
-        # skip = 0
-        # ids = []
-        # # web_ids = []
-        # prev_ids = []
-        # condition = True
-        # while condition:
-        #     r = requests.post("http://www.lostfilm.tv/ajaxik.php", params={'type': 'search', 's': '2', 't': '0', 'act': 'serial', 'o': '%s' % skip})
-        #     ids_incr = [int(r1['img'].split("/")[4]) for r1 in r.json()['data']]
-        #     # web_ids_incr = [r1['title_orig'] for r1 in r.json()['data']]
-        #     if prev_ids == ids_incr:
-        #         condition = False
-        #     else:
-        #         skip += 10
-        #     prev_ids = ids_incr
-        #     ids += ids_incr
-        #     # web_ids += web_ids_incr
-        # # web_ids = [re.sub(' ', '_', re.sub('[^a-zA-Z0-9 \n\.]', '', wid)) for wid in web_ids]
         f = open(self.series_ids_db, 'r')
         contents = f.readlines()
         ids = []
         for l in contents:
             ids.append(int(l.split(': ')[0]))
         f.close()
-
-        return ids # self.series_web_ids_dict.keys() #, web_ids
+        return ids
 
     def _get_series_doc(self, web_id):
         return self.fetch(self.BASE_URL + "/series/%s"%web_id)
@@ -446,8 +426,10 @@ class LostFilmScraper(AbstractScraper):
 
     	self.check_for_new_series()
         self.ensure_authorized()
-        page = (skip or 0) / 10 + 1
+    	page = (skip or 0)/ 10 + 1
+    	self.fetch(self.BASE_URL) # obtain cookies, otherwise throws an error when trying to start first time
         doc = self.fetch(self.BASE_URL + "/new/page_%s" % page)
+        self.log.info(doc)
         with Timer(logger=self.log, name='Parsing episodes list'):
             body = doc.find('div', {'class': 'content history'})
             series_titles = body.find('div', {'class': 'name-ru'}).strings
@@ -467,7 +449,6 @@ class LostFilmScraper(AbstractScraper):
             se = body.find('div', {'class': 'left-part'}).strings
             season_numbers = [int(s.split(' ')[0]) for s in se]
             episode_numbers = [int(s.split(' ')[2]) for s in se]
-            # self.log.info('%s'%str(type(episode_numbers[0])))
 
             icons = ['http:' + url for url in icons]
             posters = [url.replace('/Posters/image', '/Posters/poster') for url in icons]
