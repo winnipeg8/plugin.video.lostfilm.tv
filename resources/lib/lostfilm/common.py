@@ -338,7 +338,7 @@ def get_library():
 
 
 def is_authorized():
-    return get_scraper().authorized()
+    return get_scraper().ensure_authorized()
 
 
 def update_library():
