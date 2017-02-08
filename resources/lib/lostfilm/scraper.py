@@ -429,7 +429,6 @@ class LostFilmScraper(AbstractScraper):
     	page = (skip or 0)/ 10 + 1
     	self.fetch(self.BASE_URL) # obtain cookies, otherwise throws an error when trying to start first time
         doc = self.fetch(self.BASE_URL + "/new/page_%s" % page)
-        self.log.info(doc)
         with Timer(logger=self.log, name='Parsing episodes list'):
             body = doc.find('div', {'class': 'content history'})
             series_titles = body.find('div', {'class': 'name-ru'}).strings
