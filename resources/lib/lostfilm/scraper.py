@@ -4,7 +4,7 @@ from __future__ import unicode_literals
 from collections import namedtuple
 import hashlib
 import re
-import requests
+import requests, os
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from support.common import str_to_date, Attribute
@@ -12,6 +12,8 @@ from support.abstract.scraper import AbstractScraper, ScraperError, parse_size
 from util.encoding import ensure_str
 from util.htmldocument import HtmlDocument
 from util.timer import Timer
+
+FULL_SEASON_TORRENT_NUMBER = 99 # 999 for the new website
 
 
 class Series(namedtuple('Series', ['id', 'web_id', 'title', 'original_title', 'image', 'icon', 'poster', 'country', 'year',
@@ -40,11 +42,12 @@ class Episode(namedtuple('Episode', ['series_id', 'series_title', 'web_id', 'sea
 
     @property
     def is_complete_season(self):
-        return self.episode_number == 999
+        return self.episode_number == FULL_SEASON_TORRENT_NUMBER
 
     @property
     def is_multi_episode(self):
-        return False #"-" in self.episode_number
+        return False #"-" in self.episode_number 
+        # need to handle multiple episodes
 
     @property
     def episode_numbers(self):
@@ -76,10 +79,12 @@ class LostFilmScraper(AbstractScraper):
     LOGIN_URL = "http://www.lostfilm.tv/ajaxik.php"
     BLOCKED_MESSAGE = "Контент недоступен на территории Российской Федерации"
 
-    def __init__(self, login, password, cookie_jar=None, xrequests_session=None, series_cache=None, max_workers=10,
+    def __init__(self, login, password, cookie_jar=None, series_ids_db=None, xrequests_session=None, series_cache=None, max_workers=10,
                  anonymized_urls=None):
         super(LostFilmScraper, self).__init__(xrequests_session, cookie_jar)
         self.series_cache = series_cache if series_cache is not None else {}
+        # self.series_ids_cache = series_ids_cache if series_ids_cache is not None else {}
+        self.series_ids_db = series_ids_db
         self.max_workers = max_workers
         self.response = None
         self.login = login
@@ -90,22 +95,68 @@ class LostFilmScraper(AbstractScraper):
         self.session.add_proxy_need_check(self._check_content_is_blocked)
         self.session.add_proxy_validator(self._validate_proxy)
         self.series_web_ids_dict = self.load_series_web_ids_dict()
-        self.auth = None
+        # self.auth = None
 
+    def fetch_series_ids(self):
+
+        url = "http://www.lostfilm.tv/ajaxik.php"
+        skip = 0
+        ids = []
+        web_ids = []
+        prev_ids = []
+        condition = True
+        while condition:
+            r = requests.post(url, params={'type': 'search', 's': '2', 't': '0', 'act': 'serial', 'o': '%s' % skip})
+            ids_incr = [int(r1['img'].split("/")[4]) for r1 in r.json()['data']]
+            web_ids_incr = [r1['title_orig'] for r1 in r.json()['data']]
+            if prev_ids == ids_incr:
+                condition = False
+            else:
+                skip += 10
+            prev_ids = ids_incr
+            ids += ids_incr
+            web_ids += web_ids_incr
+        web_ids = [re.sub('&', 'and', (re.sub(' ', '_', re.sub('[^a-zA-Z0-9-& \n\.]', '', wid)))) for wid in web_ids]
+        for i in range(len(web_ids)):
+            if web_ids[i] == '11.22.63':
+                web_ids[i] = '11-22-63'
+        f = open(self.series_ids_db, 'w')
+        for i in range(len(ids)):
+            f.write("%d: %s\n" % (ids[i], web_ids[i]))
+        f.close()
+
+    def check_for_new_series(self):
+
+    	if not(os.path.isfile(self.series_ids_db)):
+            self.fetch_series_ids()
+        else:
+	        f = open(self.series_ids_db, 'r')
+	        contents = f.readlines()
+	        compare_ids = []
+	        for l in contents:
+	            compare_ids.append(int(l.split(': ')[0]))
+	        f.close()
+	        url = "http://www.lostfilm.tv/ajaxik.php"
+	        r = requests.post(url, params={'type': 'search', 's': '3', 't': '0', 'act': 'serial', 'o': 0})
+	        ids_incr = [int(r1['img'].split("/")[4]) for r1 in r.json()['data']]
+	        if not(set(ids_incr).intersection(compare_ids) == set(ids_incr)):
+	            self.fetch_series_ids()
 
     def load_series_web_ids_dict(self):
 
-        f = open('series_id', 'r')
-        contents = f.readlines()
-        web_ids = []
-        ids = []
-        for l in contents:
-            ids.append(int(l.split(': ')[0]))
-            web_id = l.split(': ')[1][:-1]
-            web_ids.append(web_id)
-        f.close()
-
-        return dict(zip(ids, web_ids))
+        if not(os.path.isfile(self.series_ids_db)):
+            return None
+        else:
+	        f = open(self.series_ids_db, 'r')
+	        contents = f.readlines()
+	        web_ids = []
+	        ids = []
+	        for l in contents:
+	            ids.append(int(l.split(': ')[0]))
+	            web_id = l.split(': ')[1][:-1]
+	            web_ids.append(web_id)
+	        f.close()
+	        return dict(zip(ids, web_ids))
 
     # noinspection PyUnusedLocal
     def _validate_proxy(self, proxy, request, response):
@@ -237,7 +288,7 @@ class LostFilmScraper(AbstractScraper):
         #     ids += ids_incr
         #     # web_ids += web_ids_incr
         # # web_ids = [re.sub(' ', '_', re.sub('[^a-zA-Z0-9 \n\.]', '', wid)) for wid in web_ids]
-        f = open('series_id', 'r')
+        f = open(self.series_ids_db, 'r')
         contents = f.readlines()
         ids = []
         for l in contents:
@@ -278,7 +329,8 @@ class LostFilmScraper(AbstractScraper):
                         release_date = None
                     onclick = str(full_season.find('div', {'class': 'external-btn'}).attrs('onClick'))
                     full_season_indicator, season_number, episode_number = parse_onclick(onclick)
-                    episode_title = '%d Сезон Полностью' % season_number
+                    episode_number = FULL_SEASON_TORRENT_NUMBER
+                    episode_title = '%dй Сезон Полностью' % season_number
                     orig_title = 'Full Season %d'% season_number
                     poster = poster_url(original_title, season_number)
                     if not series_poster:
@@ -317,7 +369,7 @@ class LostFilmScraper(AbstractScraper):
                         episodes.append(episode)
 
             self.log.info("Got %d episode(s) successfully" % (len(episodes)))
-            self.log.debug(repr(episodes).decode("unicode-escape"))
+            self.log.debug(repr(episodes).decode("utf-8"))
         return episodes
 
     def get_series_episodes_bulk(self, series_ids):
@@ -386,11 +438,13 @@ class LostFilmScraper(AbstractScraper):
                             genres, about, actors, producers, writers, plot, seasons_count, episodes_count)
 
             self.log.info("Parsed '%s' series info successfully" % series_title)
-            self.log.debug(repr(series).decode("unicode-escape"))
+            self.log.debug(repr(series).decode("utf-8"))
 
         return series
 
     def browse_episodes(self, skip=0):
+
+    	self.check_for_new_series()
         self.ensure_authorized()
         page = (skip or 0) / 10 + 1
         doc = self.fetch(self.BASE_URL + "/new/page_%s" % page)
@@ -425,7 +479,7 @@ class LostFilmScraper(AbstractScraper):
                        episode_numbers, episode_titles, original_titles, release_dates, icons, posters, images)
             episodes = [Episode(*e) for e in data if e[0]]
             self.log.info("Got %d episode(s) successfully" % (len(episodes)))
-            self.log.debug(repr(episodes).decode("unicode-escape"))
+            self.log.debug(repr(episodes).decode("utf-8"))
         return episodes
 
     def get_torrent_links(self, series_id, season_number, episode_number):
@@ -444,7 +498,7 @@ class LostFilmScraper(AbstractScraper):
             for url, qua, size in zip(urls, qualities, sizes):
                 links.append(TorrentLink(Quality.find(qua), url, parse_size(size)))
             self.log.info("Got %d link(s) successfully" % (len(links)))
-            self.log.info(repr(links).decode("unicode-escape"))
+            self.log.info(repr(links).decode("utf-8"))
         return links
 
     
@@ -468,7 +522,7 @@ class LostFilmScraper(AbstractScraper):
     #             self.log.info("%s"%type(Quality.find(qua)))
     #             links.append(TorrentLink(Quality.find(qua), url, parse_size(size)))
     #         self.log.info("Got %d link(s) successfully" % (len(links)))
-    #         self.log.info(repr(links).decode("unicode-escape"))
+    #         self.log.info(repr(links).decode("utf-8"))
     #     return links
 
 

@@ -4,11 +4,12 @@ from support import services, library
 
 import support.titleformat as tf
 from xbmcswift2 import xbmcgui, actions, xbmc, abort_requested
-from lostfilm.scraper import Episode, Series, Quality, LostFilmScraper
+from lostfilm.scraper import Episode, Series, Quality, LostFilmScraper, FULL_SEASON_TORRENT_NUMBER
 from support.torrent import TorrentFile
 from support.common import lang, date_to_str, singleton, save_files, purge_temp_dir, LocalizedError, \
     batch, toggle_watched_menu
 from support.plugin import plugin
+import unicodedata
 
 
 BATCH_EPISODES_COUNT = 5
@@ -82,6 +83,7 @@ def itemify_episodes(episodes, same_series=False):
     :type episodes: list[Episode]
     """
     series_ids = list(set(e.series_id for e in episodes))
+    # web_ids = list(set(e.web_id for e in episodes))
     scraper = get_scraper()
     series = scraper.get_series_bulk(series_ids)
     return [itemify_episode(e, series[e.series_id], same_series) for e in episodes]
@@ -105,7 +107,7 @@ def episode_label(e, same_series=False):
     else:
         label += tf.color(e.episode_title, color)
     if e.original_title and plugin.get_setting('show-original-title', bool):
-        label += " / " + e.original_title
+        label += u" / " + e.original_title.decode("utf-8")
     return label
 
 
@@ -265,6 +267,9 @@ def select_torrent_link(series, season, episode, force=False):
 def series_cache():
     return plugin.get_storage('series.db', 24 * 60 * 7, cached=False)
 
+# def series_ids_cache():
+#     return plugin.get_storage('series_ids.db', 24 * 60 * 7, cached=False)
+
 
 def library_items():
     return plugin.get_storage().setdefault('library_items', [])
@@ -284,9 +289,11 @@ def get_scraper():
     return LostFilmScraper(login=plugin.get_setting('login', unicode),
                            password=plugin.get_setting('password', unicode),
                            cookie_jar=plugin.addon_data_path('cookies'),
+                           series_ids_db=plugin.addon_data_path('series_ids'),
                            xrequests_session=xrequests_session(),
                            max_workers=BATCH_SERIES_COUNT,
                            series_cache=series_cache(),
+                           # series_ids_cache=series_ids_cache(),
                            anonymized_urls=anonymized_urls)
 
 
