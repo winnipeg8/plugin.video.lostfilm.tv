@@ -62,7 +62,7 @@ class Quality(Attribute):
         return 40208
 
     SD = (0, 'sd')
-    HD_720 = (1, 'mp4', 'hd')
+    HD_720 = (1, '720', '720p', 'mp4', 'hd')
     HD_1080 = (2, '1080p', '1080')
 
     def __lt__(self, other):
@@ -77,21 +77,24 @@ class LostFilmScraper(AbstractScraper):
     LOGIN_URL = "http://www.lostfilm.tv/ajaxik.php"
     BLOCKED_MESSAGE = "Контент недоступен на территории Российской Федерации"
 
-    def __init__(self, login, password, cookie_jar=None, series_ids_db=None, xrequests_session=None, series_cache=None, max_workers=10,
-                 anonymized_urls=None):
+    def __init__(self, login, password, cookie_jar=None, series_ids_db=None,
+                 xrequests_session=None, series_cache=None, max_workers=10, anonymized_urls=None):
         super(LostFilmScraper, self).__init__(xrequests_session, cookie_jar)
         self.series_cache = series_cache if series_cache is not None else {}
         self.series_ids_db = series_ids_db
+        self.series_web_ids_dict, self.series_ids = self.load_series_web_ids_dict()
         self.max_workers = max_workers
         self.response = None
         self.login = login
         self.password = password
         self.has_more = None
         self.anonymized_urls = anonymized_urls if anonymized_urls is not None else []
-        self.session.headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.116 Safari/537.36'
+        self.session.headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; WOW64) ' \
+                                             'AppleWebKit/537.36 (KHTML, like Gecko) ' \
+                                             'Chrome/48.0.2564.116 ' \
+                                             'Safari/537.36'
         self.session.add_proxy_need_check(self._check_content_is_blocked)
         self.session.add_proxy_validator(self._validate_proxy)
-        self.series_web_ids_dict = self.load_series_web_ids_dict()
 
     def fetch_series_ids(self):
 
@@ -101,7 +104,8 @@ class LostFilmScraper(AbstractScraper):
         prev_ids = []
         condition = True
         while condition:
-            r = requests.post(self.LOGIN_URL, params={'type': 'search', 's': '2', 't': '0', 'act': 'serial', 'o': '%s' % skip})
+            r = requests.post(self.LOGIN_URL,
+                              params={'type': 'search', 's': '2', 't': '0', 'act': 'serial', 'o': '%s' % skip})
             ids_incr = [int(r1['img'].split("/")[4]) for r1 in r.json()['data']]
             web_ids_incr = [r1['title_orig'] for r1 in r.json()['data']]
             if prev_ids == ids_incr:
@@ -120,38 +124,32 @@ class LostFilmScraper(AbstractScraper):
             f.write("%d: %s\n" % (ids[i], web_ids[i]))
         f.close()
 
+        # return ids
+
     def check_for_new_series(self):
 
-        if not(os.path.isfile(self.series_ids_db)):
+        r = requests.post(self.LOGIN_URL, params={'type': 'search', 's': '3', 't': '0', 'act': 'serial', 'o': 0})
+        ids_incr = [int(r1['img'].split("/")[4]) for r1 in r.json()['data']]
+        if not (set(ids_incr).intersection(self.series_ids) == set(ids_incr)):
             self.fetch_series_ids()
-        else:
-            f = open(self.series_ids_db, 'r')
-            contents = f.readlines()
-            compare_ids = []
-            for l in contents:
-                compare_ids.append(int(l.split(': ')[0]))
-            f.close()
 
-            r = requests.post(self.LOGIN_URL, params={'type': 'search', 's': '3', 't': '0', 'act': 'serial', 'o': 0})
-            ids_incr = [int(r1['img'].split("/")[4]) for r1 in r.json()['data']]
-            if not(set(ids_incr).intersection(compare_ids) == set(ids_incr)):
-                self.fetch_series_ids()
 
     def load_series_web_ids_dict(self):
 
         if not(os.path.isfile(self.series_ids_db)):
-            return None
-        else:
-            f = open(self.series_ids_db, 'r')
-            contents = f.readlines()
-            web_ids = []
-            ids = []
-            for l in contents:
-                ids.append(int(l.split(': ')[0]))
-                web_id = l.split(': ')[1][:-1]
-                web_ids.append(web_id)
-            f.close()
-            return dict(zip(ids, web_ids))
+            self.fetch_series_ids()
+
+        f = open(self.series_ids_db, 'r')
+        contents = f.readlines()
+        web_ids = []
+        ids = []
+        for l in contents:
+            ids.append(int(l.split(': ')[0]))
+            web_id = l.split(': ')[1][:-1]
+            web_ids.append(web_id)
+        f.close()
+
+        return dict(zip(ids, web_ids)), ids
 
     # noinspection PyUnusedLocal
     def _validate_proxy(self, proxy, request, response):
@@ -219,13 +217,7 @@ class LostFilmScraper(AbstractScraper):
         return self.get_series_bulk([series_id])[series_id]
 
     def get_all_series_ids(self):
-        f = open(self.series_ids_db, 'r')
-        contents = f.readlines()
-        ids = []
-        for l in contents:
-            ids.append(int(l.split(': ')[0]))
-        f.close()
-        return ids
+        return self.series_ids
 
     def _get_series_doc(self, web_id):
         return self.fetch(self.BASE_URL + "/series/%s"%web_id)
@@ -412,11 +404,6 @@ class LostFilmScraper(AbstractScraper):
             self.log.debug(repr(episodes).decode("utf-8"))
         return episodes
 
-    def parse_size(self, size):
-        if len(size) == 4:
-            return long(float(size) * 1024 * 1024 * 1024)
-        else:
-            return long(float(size) * 1024 * 1024)
 
     def get_torrent_links(self, series_id, season_number, episode_number):
         doc = self.fetch(self.BASE_URL + '/v_search.php', {
@@ -429,13 +416,14 @@ class LostFilmScraper(AbstractScraper):
 
         links = []
         for link_block in link_blocks:
-            link_quality = link_block.find('div', {'class': 'inner-box--label'}).text
+
+            link_quality = link_block.find('div', {'class': 'inner-box--label'}).text.lower()
             links_list_row = link_block.find('div', {'class': 'inner-box--link sub'})
             links_href = links_list_row.find('a').attr('href')
             link_desc = link_block.find('div', {'class': 'inner-box--desc'}).text
-            size = re.search('(\d+\.\d+)', link_desc).group(1)
+            size = re.search('(\d+\.\d+ ..\.)', link_desc).group(1)[:-1]
 
-            links.append(TorrentLink(Quality.find(link_quality), links_href, self.parse_size(size)))
+            links.append(TorrentLink(Quality.find(link_quality), links_href, parse_size(size)))
 
         return links
 
