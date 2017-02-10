@@ -182,8 +182,8 @@ def update_library_on_demand():
 @plugin.route('/toggle_episode_watched/<series_id>/<season>/<episode>')
 def toggle_episode_watched(series_id, season, episode):
     # scraper = get_scraper()
-    scraper.toggle_watched(series_id, season, episode)
-    # xbmc.executebuiltin(actions.toggle_watched())
+    # scraper.toggle_watched(series_id, season, episode)
+    xbmc.executebuiltin(actions.toggle_watched())
     if series_id in library_items():
         library_new_episodes().remove_by(series_id, season, episode)
 
