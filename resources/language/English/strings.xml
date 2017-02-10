@@ -162,7 +162,7 @@
     <string id="40404">Restart needed</string>
     <string id="40405">For the changes to take effect, you must restart the player. Do you want to exit now?</string>
     <string id="40406">Create LostFilm series source...</string>
-    <string id="40407">&lt;&lt; My library %s&gt;&gt;</string>
+    <string id="40407">&lt;&lt; My LF library %s&gt;&gt;</string>
     <string id="40408">Source is already exist</string>
     <string id="40409">Updating library...</string>
     <string id="40410">Error occurred during updating library (see log)</string>

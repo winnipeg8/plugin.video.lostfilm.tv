@@ -83,7 +83,6 @@ def itemify_episodes(episodes, same_series=False):
     :type episodes: list[Episode]
     """
     series_ids = list(set(e.series_id for e in episodes))
-    # web_ids = list(set(e.web_id for e in episodes))
     scraper = get_scraper()
     series = scraper.get_series_bulk(series_ids)
     return [itemify_episode(e, series[e.series_id], same_series) for e in episodes]
@@ -163,12 +162,9 @@ def itemify_common(s):
         'thumbnail': s.poster or s.image,
         'icon': s.icon,
         'info': {
-            'plot': s.plot or s.about,
+            'plot': s.plot,
             'rating': None,
-            'studio': None,
-            'castandrole': s.actors,
-            'writer': " / ".join(s.writers) if s.writers else None,
-            'director': " / ".join(s.producers) if s.producers else None,
+            'studio': s.country,
             'genre': " / ".join(s.genres) if s.genres else None,
             'tvshowtitle': s.title,
             'year': s.year,
@@ -267,9 +263,6 @@ def select_torrent_link(series, season, episode, force=False):
 def series_cache():
     return plugin.get_storage('series.db', 24 * 60 * 7, cached=False)
 
-# def series_ids_cache():
-#     return plugin.get_storage('series_ids.db', 24 * 60 * 7, cached=False)
-
 
 def library_items():
     return plugin.get_storage().setdefault('library_items', [])
@@ -293,7 +286,6 @@ def get_scraper():
                            xrequests_session=xrequests_session(),
                            max_workers=BATCH_SERIES_COUNT,
                            series_cache=series_cache(),
-                           # series_ids_cache=series_ids_cache(),
                            anonymized_urls=anonymized_urls)
 
 
