@@ -82,6 +82,8 @@ class TransmissionClient(TorrentClient):
 
     def add(self, torrent, download_dir, paused=False):
         """
+        :param download_dir:
+        :param paused:
         :type torrent: Torrent
         """
         if torrent.has_data() or torrent.has_file_name():

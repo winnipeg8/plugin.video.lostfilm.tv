@@ -19,6 +19,7 @@ class AbstractPlayer(Callbacks):
 
     def play(self, item=None, subtitles=None):
         """
+        :param subtitles:
         :type item: dict
         """
         raise NotImplementedError
@@ -72,6 +73,7 @@ class DummyPlayer(AbstractPlayer):
 
     def play(self, item=None, subtitles=None):
         """
+        :param subtitles:
         :type item: ListItem
         """
         if item is None and self.playing:

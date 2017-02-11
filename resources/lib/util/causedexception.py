@@ -80,6 +80,7 @@ if __name__ == '__main__':
         else:
             raise CausedException("deeplib error %d" % i)
 
+
     def library(i):
         if i == 0:
             return "no problem"
@@ -108,6 +109,7 @@ if __name__ == '__main__':
         else:
             raise CausedException("lib error unexpected %d" % i)
 
+
     def application():
         e0 = e1 = e2 = e3 = None
         try:
@@ -129,6 +131,7 @@ if __name__ == '__main__':
         if e0 or e1 or e2 or e3:
             raise CausedException("application error",
                                   cause=[e for e in (e0, e1, e2, e3) if e is not None])
+
 
     try:
         application()

@@ -175,7 +175,7 @@ def purge_temp_dir():
     if temp_size > max_size:
         log.info("Purging temporary folder...")
         shutil.rmtree(path, True)
-        if not direxists(path):
+        if not os.path.exists(path):
             # noinspection PyBroadException
             if xbmcvfs.mkdirs(path):
                 log.info("New temporary folder size: %d", get_dir_size(path))

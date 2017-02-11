@@ -105,6 +105,7 @@ class Torrent2HttpStream(TorrentStream):
 
     def play(self, player, torrent, list_item=None, file_id=None):
         """
+        :param file_id:
         :type list_item: dict
         :type torrent: Torrent
         :type player: AbstractPlayer

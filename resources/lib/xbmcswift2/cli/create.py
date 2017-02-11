@@ -42,10 +42,12 @@ def error_msg(msg):
     """A decorator that sets the error_message attribute of the decorated
     function to the provided value.
     """
+
     def decorator(func):
         """Sets the error_message attribute on the provided function"""
         func.error_message = msg
         return func
+
     return decorator
 
 
@@ -142,13 +144,13 @@ def create_new_project():
     readline.parse_and_bind('tab: complete')
 
     print \
-"""
+        """
     xbmcswift2 - A micro-framework for creating XBMC plugins.
     xbmc@jonathanbeluch.com
     --
 """
     print 'I\'m going to ask you a few questions to get this project' \
-        ' started.'
+          ' started.'
 
     # noinspection PyDictCreation
     opts = {}

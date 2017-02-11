@@ -31,6 +31,7 @@ def safe_update_library():
         plugin.close_storages()
     return False
 
+
 if __name__ == '__main__':
     sleep(5000)
     safe_update_library()

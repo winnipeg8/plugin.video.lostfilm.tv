@@ -105,6 +105,7 @@ class UTorrentClient(TorrentClient):
 
     def add(self, torrent, download_dir):
         """
+        :param download_dir:
         :type torrent: Torrent
         """
         if torrent.has_data() or torrent.has_file_name():

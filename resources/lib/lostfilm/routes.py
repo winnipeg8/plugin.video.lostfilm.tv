@@ -1,17 +1,16 @@
 # -*- coding: utf-8 -*-
 
 import support.titleformat as tf
-from support.common import lang, with_fanart, batch, download_torrent, get_torrent
 import xbmc
-from xbmcswift2 import actions
-from xbmcswift2.common import abort_requested
-from support.plugin import plugin
 from lostfilm.common import select_torrent_link, get_scraper, itemify_episodes, itemify_file, play_torrent, \
     itemify_series, BATCH_SERIES_COUNT, BATCH_EPISODES_COUNT, library_items, update_library_menu, \
     library_new_episodes, NEW_LIBRARY_ITEM_COLOR, check_last_episode, check_first_start
 from lostfilm.scraper import FULL_SEASON_TORRENT_NUMBER
+from support.common import lang, with_fanart, batch, download_torrent, get_torrent
+from support.plugin import plugin
 from support.torrent import Torrent
-import requests, re, os.path
+from xbmcswift2 import actions
+from xbmcswift2.common import abort_requested
 
 
 @plugin.route('/browse_season/<series>/<season>')
@@ -50,8 +49,8 @@ def play_episode(series, season, episode):
         return
     torrent = get_torrent(link.url)
     library_new_episodes().remove_by(series, season, episode)
-#     scraper = get_scraper()
-#     scraper.toggle_watched(series_id, season, episode)
+    #     scraper = get_scraper()
+    #     scraper.toggle_watched(series_id, season, episode)
     play_torrent(torrent)
 
 
@@ -77,7 +76,8 @@ def browse_all_series():
         items = [itemify_series(series[i]) for i in batch_ids]
         plugin.add_items(with_fanart(items), total)
     plugin.finish()
-    
+
+
 @plugin.route('/browse_favorite_series')
 def browse_favorite_series():
     plugin.set_content('tvshows')
@@ -134,7 +134,7 @@ def index():
     total = len(episodes)
     header = [
         {'label': lang(40401), 'path': plugin.url_for('browse_all_series')},
-        {'label': lang(40407)  % new_str, 'path': plugin.url_for('browse_favorite_series'),
+        {'label': lang(40407) % new_str, 'path': plugin.url_for('browse_favorite_series'),
          'context_menu': update_library_menu()},
     ]
     items = []

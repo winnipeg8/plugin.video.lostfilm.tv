@@ -14,13 +14,11 @@ from optparse import OptionParser
 from xbmcswift2.cli.app import RunCommand
 from xbmcswift2.cli.create import CreateCommand
 
-
 # TODO: Make an ABC for Command
 COMMANDS = {
     RunCommand.command: RunCommand,
     CreateCommand.command: CreateCommand,
 }
-
 
 # TODO: Make this usage dynamic based on COMMANDS dict
 USAGE = '''%prog <command>

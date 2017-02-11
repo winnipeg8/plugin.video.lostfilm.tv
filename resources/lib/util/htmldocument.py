@@ -170,6 +170,8 @@ class HtmlDocument(HtmlElements):
     @classmethod
     def from_string(cls, html, encoding='utf-8'):
         """
+        :param html:
+        :param encoding:
         :type cls: type
         :rtype: HtmlDocument
         """

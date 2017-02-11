@@ -76,6 +76,7 @@ __author__ = 'Brian Quinlan (brian@sweetapp.com)'
 _threads_queues = weakref.WeakKeyDictionary()
 _shutdown = False
 
+
 def _python_exit():
     global _shutdown
     _shutdown = True
@@ -85,11 +86,13 @@ def _python_exit():
     for t, q in items:
         t.join()
 
+
 # Controls how many more calls than processes will be queued in the call queue.
 # A smaller number will mean that processes spend more time idle waiting for
 # work while a larger number will make Future.cancel() succeed less frequently
 # (Futures in the call queue cannot be cancelled).
 EXTRA_QUEUED_CALLS = 1
+
 
 class _WorkItem(object):
     def __init__(self, future, fn, args, kwargs):
@@ -98,11 +101,13 @@ class _WorkItem(object):
         self.args = args
         self.kwargs = kwargs
 
+
 class _ResultItem(object):
     def __init__(self, work_id, exception=None, result=None):
         self.work_id = work_id
         self.exception = exception
         self.result = result
+
 
 class _CallItem(object):
     def __init__(self, work_id, fn, args, kwargs):
@@ -110,6 +115,7 @@ class _CallItem(object):
         self.fn = fn
         self.args = args
         self.kwargs = kwargs
+
 
 def _process_worker(call_queue, result_queue):
     """Evaluates calls from call_queue and places the results in result_queue.
@@ -139,6 +145,7 @@ def _process_worker(call_queue, result_queue):
         else:
             result_queue.put(_ResultItem(call_item.work_id,
                                          result=r))
+
 
 def _add_call_item_to_queue(pending_work_items,
                             work_ids,
@@ -177,6 +184,7 @@ def _add_call_item_to_queue(pending_work_items,
                 del pending_work_items[work_id]
                 continue
 
+
 def _queue_management_worker(executor_reference,
                              processes,
                              pending_work_items,
@@ -202,10 +210,12 @@ def _queue_management_worker(executor_reference,
             process workers.
     """
     nb_shutdown_processes = [0]
+
     def shutdown_one_process():
         """Tell a worker to terminate, which will in turn wake us again"""
         call_queue.put(None)
         nb_shutdown_processes[0] += 1
+
     while True:
         _add_call_item_to_queue(pending_work_items,
                                 work_ids_queue,
@@ -241,8 +251,11 @@ def _queue_management_worker(executor_reference,
                 return
         del executor
 
+
 _system_limits_checked = False
 _system_limited = None
+
+
 def _check_system_limits():
     global _system_limits_checked, _system_limited
     if _system_limits_checked:
@@ -265,6 +278,7 @@ def _check_system_limits():
         return
     _system_limited = "system provides too few semaphores (%d available, 256 necessary)" % nsems_max
     raise NotImplementedError(_system_limited)
+
 
 class ProcessPoolExecutor(_base.Executor):
     def __init__(self, max_workers=None):
@@ -303,15 +317,16 @@ class ProcessPoolExecutor(_base.Executor):
         # the queue management thread.
         def weakref_cb(_, q=self._result_queue):
             q.put(None)
+
         if self._queue_management_thread is None:
             self._queue_management_thread = threading.Thread(
-                    target=_queue_management_worker,
-                    args=(weakref.ref(self, weakref_cb),
-                          self._processes,
-                          self._pending_work_items,
-                          self._work_ids,
-                          self._call_queue,
-                          self._result_queue))
+                target=_queue_management_worker,
+                args=(weakref.ref(self, weakref_cb),
+                      self._processes,
+                      self._pending_work_items,
+                      self._work_ids,
+                      self._call_queue,
+                      self._result_queue))
             self._queue_management_thread.daemon = True
             self._queue_management_thread.start()
             _threads_queues[self._queue_management_thread] = self._result_queue
@@ -319,9 +334,9 @@ class ProcessPoolExecutor(_base.Executor):
     def _adjust_process_count(self):
         for _ in range(len(self._processes), self._max_workers):
             p = multiprocessing.Process(
-                    target=_process_worker,
-                    args=(self._call_queue,
-                          self._result_queue))
+                target=_process_worker,
+                args=(self._call_queue,
+                      self._result_queue))
             p.start()
             self._processes.add(p)
 
@@ -342,6 +357,7 @@ class ProcessPoolExecutor(_base.Executor):
             self._start_queue_management_thread()
             self._adjust_process_count()
             return f
+
     submit.__doc__ = _base.Executor.submit.__doc__
 
     def shutdown(self, wait=True):
@@ -358,6 +374,8 @@ class ProcessPoolExecutor(_base.Executor):
         self._call_queue = None
         self._result_queue = None
         self._processes = None
+
     shutdown.__doc__ = _base.Executor.shutdown.__doc__
+
 
 atexit.register(_python_exit)

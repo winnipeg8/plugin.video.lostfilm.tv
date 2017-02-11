@@ -70,6 +70,11 @@ class Sources(object):
     def add_video(self, path, label, scraper_settings, scan_recursive=False,
                   use_folder_names=False, no_update=False):
         """
+        :param path:
+        :param label:
+        :param scan_recursive:
+        :param use_folder_names:
+        :param no_update:
         :type scraper_settings: ScraperSettings
         """
         self.add('video', path, label)

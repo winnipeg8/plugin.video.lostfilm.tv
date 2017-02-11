@@ -124,6 +124,10 @@ class VideoDatabase(MediaDatabase):
 
     def update_path(self, path, scraper_settings, scan_recursive=False, use_folder_names=False, no_update=False):
         """
+        :param path:
+        :param scan_recursive:
+        :param use_folder_names:
+        :param no_update:
         :type scraper_settings: ScraperSettings
         """
         ss = scraper_settings

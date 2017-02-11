@@ -11,6 +11,7 @@
 from xbmcswift2.common import unpickle_args
 import urlparse
 import urllib
+
 try:
     from urlparse import parse_qs
 except ImportError:

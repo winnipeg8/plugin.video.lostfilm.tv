@@ -190,6 +190,7 @@ def decode_fs(string):
     res = unicodedata.normalize('NFC', res)
     return res
 
+
 def encode_fs(string):
     string = ensure_unicode(string)
     return string.encode(get_filesystem_encoding())
@@ -295,7 +296,7 @@ def join_path(a, *p):
 
             # Else path has a drive letter, and b doesn't but is absolute.
             elif len(path) > 3 or (len(path) == 3 and
-                                   path[-1] not in "/\\"):
+                                           path[-1] not in "/\\"):
                 # case 3
                 b_wins = 1
 
