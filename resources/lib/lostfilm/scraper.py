@@ -22,7 +22,9 @@ class Series(namedtuple('Series', ['id', 'web_id', 'title', 'original_title', 'c
 
 
 class Episode(namedtuple('Episode', ['series_id', 'web_id', 'series_title', 'season_number', 'episode_number',
-                                     'episode_title', 'original_title', 'release_date', 'icon', 'poster', 'image'])):
+                                     'episode_title', 'original_title', 'release_date', 'icon', 'poster', 'image',
+                                     'watched'])):
+
     def __eq__(self, other):
         return self.series_id == other.series_id and \
                self.season_number == other.season_number and \
@@ -243,8 +245,9 @@ class LostFilmScraper(AbstractScraper):
     def _get_series_doc(self, web_id):
         return self.fetch(self.BASE_URL + "/series/%s" % web_id)
 
-    def get_series_info(self, series_id, web_id):
+    def get_series_info(self, series_id):
 
+        web_id = self.series_web_ids_dict[series_id]
         doc = self._get_series_doc(web_id)
         with Timer(logger=self.log, name='Parsing series info with ID %s' % web_id):
             title = doc.find('h1', {'class': 'header'})
@@ -295,8 +298,7 @@ class LostFilmScraper(AbstractScraper):
             with Timer(logger=self.log,
                        name="Bulk fetching series with IDs " + ", ".join(str(i) for i in not_cached_ids)):
                 with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-                    futures = [executor.submit(self.get_series_info, _id, self.series_web_ids_dict[_id]) for _id in
-                               not_cached_ids]
+                    futures = [executor.submit(self.get_series_info, _id) for _id in not_cached_ids]
                     for future in as_completed(futures):
                         result = future.result()
                         self.series_cache[result.id] = results[result.id] = result
@@ -309,6 +311,7 @@ class LostFilmScraper(AbstractScraper):
 
         web_id = self.series_web_ids_dict[series_id]
         doc = self._get_series_doc(web_id + '/seasons')
+        watched_episodes = self.parse_watched_response(series_id)
         episodes = []
         with Timer(logger=self.log, name='Parsing episodes of series with ID %d' % series_id):
             title = doc.find('div', {'class': 'title-block'})
@@ -338,8 +341,9 @@ class LostFilmScraper(AbstractScraper):
                     poster = poster_url(series_id, season_number)
                     if not series_poster:
                         series_poster = poster
+                    watched = False
                     episode = Episode(series_id, web_id, series_title, season_number, episode_number,
-                                      episode_title, orig_title, release_date, poster, poster, image)
+                                      episode_title, orig_title, release_date, poster, poster, image, watched)
                     if full_season_indicator != 0:
                         episodes.append(episode)
 
@@ -373,8 +377,11 @@ class LostFilmScraper(AbstractScraper):
                     image = poster_url(series_id, season_number)
                     if not series_poster:
                         series_poster = poster
+                    watched = False
+                    if (season_number, episode_number) in watched_episodes:
+                        watched = True
                     episode = Episode(series_id, web_id, series_title, season_number, episode_number,
-                                      episode_title, orig_title, release_date, icon, poster, image)
+                                      episode_title, orig_title, release_date, icon, poster, image, watched)
                     if full_season_indicator != 0:
                         episodes.append(episode)
 
@@ -431,38 +438,50 @@ class LostFilmScraper(AbstractScraper):
             for i in range(len(release_dates)):
                 posters[i] = posters[i].replace('/Posters/poster',
                                                 '/Posters/e_%s_%s' % (season_numbers[i], episode_numbers[i]))
-
+            watched = [False] * len(series_ids)
+            for i in range(len(series_ids)):
+                if (season_numbers[i], episode_numbers[i]) in self.parse_watched_response(series_ids[i]):
+                    watched[i] = True
             data = zip(series_ids, web_ids, series_titles, season_numbers, episode_numbers,
-                       episode_titles, original_titles, release_dates, icons, posters, images)
+                       episode_titles, original_titles, release_dates, icons, posters, images, watched)
             episodes = [Episode(*e) for e in data if e[0]]
             self.log.info("Got %d episode(s) successfully" % (len(episodes)))
             self.log.debug(repr(episodes).decode("utf-8"))
         return episodes
 
-    def toggle_watched(self, series_id, season=None, episode=None):
-        if episode is None:
-            episodes = self.get_series_episodes(series_id)
-            for e in episodes:
-                if not e.is_complete_season:
-                    params = {'act': 'serial', 'type': 'markepisode',
-                              'val': '%d-%d-%d' % (series_id, e.season_number, e.episode_number)}
-                    r = self.fetch(self.LOGIN_URL, data=params)
-        elif season != FULL_SEASON_TORRENT_NUMBER:
-            params = {'act': 'serial', 'type': 'markepisode', 'val': '%d-%d-%d' % (series_id, season, episode)}
-            r = self.fetch(self.LOGIN_URL, data=params)
+    # def toggle_watched(self, series_id, season=None, episode=None):
+    #     self.ensure_authorized()
+    #     if season is None:
+    #         episodes = self.get_series_episodes(series_id)
+    #         for e in episodes:
+    #             if not e.is_complete_season:
+    #                 params = {'act': 'serial', 'type': 'markepisode',
+    #                           'val': '%d-%d-%d' % (series_id, e.season_number, e.episode_number)}
+    #                 r = self.fetch(self.LOGIN_URL, data=params)
+    #     elif season != FULL_SEASON_TORRENT_NUMBER:
+    #         params = {'act': 'serial', 'type': 'markepisode', 'val': '%d-%d-%d' % (series_id, season, episode)}
+    #         r = self.fetch(self.LOGIN_URL, data=params)
+    #     # else:
+    #     #      params = {'act': 'serial', 'type': 'markseason', 'val': '%d-%d' % (series_id, season)}
+    #     #     r = self.fetch(self.LOGIN_URL, data=params)
+
+    def parse_watched_response(self, series_id):
+        self.ensure_authorized()
+        data = {'act': 'serial', 'type': 'getmarks', 'id': series_id}
+        response = self.fetch(self.LOGIN_URL, data=data)
+        parsed_response = json.loads(response.text)
+        if 'error' in parsed_response and parsed_response['error'] == 2:
+            answer = []
         else:
-            params = {'act': 'serial', 'type': 'markseason', 'val': '%d-%d' % (series_id, season)}
-            r = self.fetch(self.LOGIN_URL, data=params)
+            if len(parsed_response) != 0:
+                parsed_response = parsed_response['data']
+            answer = [(int(r.split('-')[-2]), int(r.split('-')[-1])) for r in parsed_response]
+
+        return answer
 
     def add_series(self, series_id):
         params = {'act': 'serial', 'type': 'follow', 'id': series_id}
         r = self.fetch(self.LOGIN_URL, data=params)
-
-
-# def watched_episodes(self, series_id):
-#         data = {'act': 'serial', 'type': 'getmarks', 'id': series_id}
-#         response = self.fetch(self.LOGIN_URL, data = data, json_req=True)
-#     return response
 
 
 def parse_onclick(s):

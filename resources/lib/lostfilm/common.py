@@ -1,16 +1,13 @@
 # -*- coding: utf-8 -*-
 from contextlib import closing
-from support import services, library
 
 import support.titleformat as tf
-from xbmcswift2 import xbmcgui, actions, xbmc, abort_requested
-from lostfilm.scraper import Episode, Series, Quality, LostFilmScraper, FULL_SEASON_TORRENT_NUMBER
-from support.torrent import TorrentFile
+from lostfilm.scraper import Episode, Series, Quality, LostFilmScraper
+from support import services, library
 from support.common import lang, date_to_str, singleton, save_files, purge_temp_dir, LocalizedError, \
     batch, toggle_watched_menu
 from support.plugin import plugin
-import unicodedata
-
+from xbmcswift2 import xbmcgui, actions, xbmc, abort_requested
 
 BATCH_EPISODES_COUNT = 5
 BATCH_SERIES_COUNT = 20
@@ -68,6 +65,7 @@ def select_quality_menu(e):
 
 def episode_url(e, select_quality=None):
     """
+    :param select_quality:
     :type e: Episode
     """
     if e.is_complete_season:
@@ -80,6 +78,7 @@ def episode_url(e, select_quality=None):
 
 def itemify_episodes(episodes, same_series=False):
     """
+    :param same_series:
     :type episodes: list[Episode]
     """
     series_ids = list(set(e.series_id for e in episodes))
@@ -90,6 +89,7 @@ def itemify_episodes(episodes, same_series=False):
 
 def episode_label(e, same_series=False):
     """
+    :param same_series:
     :type e: Episode
     """
     label = ""
@@ -130,6 +130,7 @@ def toggle_episode_watched_menu(episode):
 
 def itemify_episode(e, s, same_series=False):
     """
+    :param same_series:
     :type e: Episode
     :type s: Series
     """
@@ -178,6 +179,7 @@ def itemify_common(s):
 
 def itemify_file(path, series, season, f):
     """
+    :param path:
     :type series: Series
     :type season: string
     :type f: TorrentFile
@@ -199,6 +201,7 @@ def itemify_file(path, series, season, f):
 
 def series_label(s, highlight_library_items=True):
     """
+    :param highlight_library_items:
     :type s: Series
     """
     if s.id in library_items() and highlight_library_items:
@@ -216,6 +219,7 @@ def series_label(s, highlight_library_items=True):
 
 def itemify_series(s, highlight_library_items=True):
     """
+    :param highlight_library_items:
     :type s: Series
     """
     item = itemify_common(s)
