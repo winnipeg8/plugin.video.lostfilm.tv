@@ -23,7 +23,7 @@ class Series(namedtuple('Series', ['id', 'web_id', 'title', 'original_title', 'c
 
 class Episode(namedtuple('Episode', ['series_id', 'web_id', 'series_title', 'season_number', 'episode_number',
                                      'episode_title', 'original_title', 'release_date', 'icon', 'poster', 'image',
-                                     'watched'])):
+                                     'plot', 'watched'])):
     def __eq__(self, other):
         return self.series_id == other.series_id and \
                self.season_number == other.season_number and \
@@ -134,6 +134,7 @@ class LostFilmScraper(AbstractScraper):
         ids_incr = [int(r1['img'].split("/")[4]) for r1 in r.json()['data']]
         if not (set(ids_incr).intersection(self.series_ids) == set(ids_incr)):
             self.fetch_series_ids()
+            self.series_web_ids_dict, self.series_ids = self.load_series_web_ids_dict()
 
     def load_series_web_ids_dict(self):
 
@@ -309,6 +310,11 @@ class LostFilmScraper(AbstractScraper):
     def get_series_episodes(self, series_id):
 
         web_id = self.series_web_ids_dict[series_id]
+        doc = self._get_series_doc(web_id)
+        info_and_plot = doc.find('div', {'class': 'text-block description'}).text
+        info = info_and_plot.split('Описание')[-1].strip(' \t\n\r')
+        plot = info.split('Сюжет')[-1].strip(' \t\n\r')
+        series_info = plot or info
         doc = self._get_series_doc(web_id + '/seasons')
         watched_episodes = self.parse_watched_response(series_id)
         episodes = []
@@ -342,7 +348,8 @@ class LostFilmScraper(AbstractScraper):
                         series_poster = poster
                     watched = False
                     episode = Episode(series_id, web_id, series_title, season_number, episode_number,
-                                      episode_title, orig_title, release_date, poster, poster, image, watched)
+                                      episode_title, orig_title, release_date, poster, poster, image,
+                                      series_info, watched)
                     if full_season_indicator != 0:
                         episodes.append(episode)
 
@@ -371,6 +378,14 @@ class LostFilmScraper(AbstractScraper):
                     episode_title = titles[i]
                     orig_title = orig_titles[i]
 
+                    doc = self._get_series_doc(web_id + '/season_%s/episode_%s/' % (season_number, episode_number))
+                    info_and_plot = doc.find('div', {'class': 'text-block description'}).text
+                    if len(info_and_plot) != 0:
+                        plot = info_and_plot.split('Описание')[-1].strip(' \t\n\r')
+                        plot = plot.split('\u2026')[0].strip()
+                    else:
+                        plot = series_info
+
                     poster = 'http://static.lostfilm.tv/Images/%s/Posters/e_%s_%s.jpg' \
                              % (series_id, season_number, episode_number)
                     image = poster_url(series_id, season_number)
@@ -380,7 +395,8 @@ class LostFilmScraper(AbstractScraper):
                     if (season_number, episode_number) in watched_episodes:
                         watched = True
                     episode = Episode(series_id, web_id, series_title, season_number, episode_number,
-                                      episode_title, orig_title, release_date, icon, poster, image, watched)
+                                      episode_title, orig_title, release_date, icon, poster, image,
+                                      plot, watched)
                     if full_season_indicator != 0:
                         episodes.append(episode)
 
@@ -441,8 +457,23 @@ class LostFilmScraper(AbstractScraper):
             for i in range(len(series_ids)):
                 if (season_numbers[i], episode_numbers[i]) in self.parse_watched_response(series_ids[i]):
                     watched[i] = True
+
+            plots = []
+            for i in range(len(web_ids)):
+                doc = self._get_series_doc(web_ids[i] + '/season_%s/episode_%s/' % (season_numbers[i], episode_numbers[i]))
+                info_and_plot = doc.find('div', {'class': 'text-block description'}).text
+                if len(info_and_plot) != 0:
+                    plot = info_and_plot.split('Описание')[-1].strip(' \t\n\r')
+                else:
+                    doc = self._get_series_doc(web_ids[i])
+                    info_and_plot = doc.find('div', {'class': 'text-block description'}).text
+                    info = info_and_plot.split('Описание')[-1].strip(' \t\n\r')
+                    plot = info.split('Сюжет')[-1].strip(' \t\n\r') or info
+                plots.append(plot)
+
             data = zip(series_ids, web_ids, series_titles, season_numbers, episode_numbers,
-                       episode_titles, original_titles, release_dates, icons, posters, images, watched)
+                       episode_titles, original_titles, release_dates, icons, posters, images,
+                       plots, watched)
             episodes = [Episode(*e) for e in data if e[0]]
             self.log.info("Got %d episode(s) successfully" % (len(episodes)))
             self.log.debug(repr(episodes).decode("utf-8"))
@@ -495,5 +526,5 @@ def parse_onclick(s):
         return 0, 0, ""
 
 
-def poster_url(id, season=1):
-    return 'http://static.lostfilm.tv/Images/%s/Posters/shmoster_s%s.jpg' % (id, season)
+def poster_url(s_id, season=1):
+    return 'http://static.lostfilm.tv/Images/%s/Posters/shmoster_s%s.jpg' % (s_id, season)

@@ -146,6 +146,7 @@ def itemify_episode(e, s, same_series=False):
         'is_playable': not e.is_complete_season,
     })
     item['info'].update({
+        'plot': e.plot,
         'episode': e.episode_number if not e.is_complete_season else None,
         'season': e.season_number,
         'title': e.episode_title,
