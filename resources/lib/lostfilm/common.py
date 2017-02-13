@@ -141,7 +141,8 @@ def itemify_episode(e, s, same_series=False):
         'path': episode_url(e),
         'context_menu':
             select_quality_menu(e) + (go_to_series_menu(s) if not same_series else []) +
-            download_menu(e) + info_menu(e) + toggle_episode_watched_menu(e) + library_menu(s),
+            download_menu(e) + info_menu(e) +
+            (toggle_episode_watched_menu(e) if not e.is_complete_season else []) + library_menu(s),
         'is_playable': not e.is_complete_season,
     })
     item['info'].update({
@@ -151,6 +152,7 @@ def itemify_episode(e, s, same_series=False):
         'premiered': date_to_str(e.release_date, '%Y-%m-%d'),
         'originaltitle': e.original_title,
         'date': date_to_str(e.release_date),
+        'playcount': 1 if e.watched else 0
     })
     return item
 

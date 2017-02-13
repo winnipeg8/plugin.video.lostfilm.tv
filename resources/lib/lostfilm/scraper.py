@@ -24,7 +24,6 @@ class Series(namedtuple('Series', ['id', 'web_id', 'title', 'original_title', 'c
 class Episode(namedtuple('Episode', ['series_id', 'web_id', 'series_title', 'season_number', 'episode_number',
                                      'episode_title', 'original_title', 'release_date', 'icon', 'poster', 'image',
                                      'watched'])):
-
     def __eq__(self, other):
         return self.series_id == other.series_id and \
                self.season_number == other.season_number and \
@@ -449,21 +448,21 @@ class LostFilmScraper(AbstractScraper):
             self.log.debug(repr(episodes).decode("utf-8"))
         return episodes
 
-    # def toggle_watched(self, series_id, season=None, episode=None):
-    #     self.ensure_authorized()
-    #     if season is None:
-    #         episodes = self.get_series_episodes(series_id)
-    #         for e in episodes:
-    #             if not e.is_complete_season:
-    #                 params = {'act': 'serial', 'type': 'markepisode',
-    #                           'val': '%d-%d-%d' % (series_id, e.season_number, e.episode_number)}
-    #                 r = self.fetch(self.LOGIN_URL, data=params)
-    #     elif season != FULL_SEASON_TORRENT_NUMBER:
-    #         params = {'act': 'serial', 'type': 'markepisode', 'val': '%d-%d-%d' % (series_id, season, episode)}
-    #         r = self.fetch(self.LOGIN_URL, data=params)
-    #     # else:
-    #     #      params = {'act': 'serial', 'type': 'markseason', 'val': '%d-%d' % (series_id, season)}
-    #     #     r = self.fetch(self.LOGIN_URL, data=params)
+    def toggle_watched(self, series_id, season=None, episode=None):
+        self.ensure_authorized()
+        if season is None:
+            episodes = self.get_series_episodes(series_id)
+            for e in episodes:
+                if not e.is_complete_season and not e.watched:
+                    params = {'act': 'serial', 'type': 'markepisode',
+                              'val': '%d-%d-%d' % (series_id, e.season_number, e.episode_number)}
+                    self.fetch(self.LOGIN_URL, data=params)
+        elif season != FULL_SEASON_TORRENT_NUMBER:
+            params = {'act': 'serial', 'type': 'markepisode', 'val': '%d-%d-%d' % (series_id, season, episode)}
+            self.fetch(self.LOGIN_URL, data=params)
+            # else:
+            #      params = {'act': 'serial', 'type': 'markseason', 'val': '%d-%d' % (series_id, season)}
+            #     r = self.fetch(self.LOGIN_URL, data=params)
 
     def parse_watched_response(self, series_id):
         self.ensure_authorized()
