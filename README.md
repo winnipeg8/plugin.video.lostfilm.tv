@@ -5,9 +5,11 @@
 To-Do:
 - Парсинг информации:
     - о сезонах (жанр, команда)
-- Синхронизация просмотренных (сделано частично, лучше сделать через JSON_RPC [http://kodi.wiki/view/JSON_RPC], как, например, у Trakt [https://github.com/trakt/script.trakt])
+- Синхронизация просмотренных (сделано частично, лучше сделать через [JSON_RPC](http://kodi.wiki/view/JSON_RPC), как, например, у [Trakt] (https://github.com/trakt/script.trakt))
 - Пофиксить multi_episode (?)
 
 Done:
 - Все как в оригинальной версии + локальная библиотека сихнронизируеюся с вашими избранными сериалами на LF. Так, например, добавление сериала в библиотеку приведет к добалению серала в избранные на сайте.
 - Опциональная подгрузка описаний
+
+Репозитроий [здесь](https://github.com/winnipeg8/xbmc.repository/blob/master/repository.winnipeg8/repository.winnipeg8-0.0.1.zip).
