@@ -84,10 +84,13 @@ def browse_favorite_series():
     scraper = get_scraper()
     series_ids = scraper.get_favorite_series()
     library = library_items()
+    counter = False
     for s_id in series_ids:
         if s_id not in library:
-            add_to_library(s_id)
-            scraper.add_series(s_id)
+            library.append(s_id)
+            counter = True
+    if counter:
+        plugin.set_setting('update-library', True)
     total = len(series_ids)
     for batch_ids in batch(series_ids, BATCH_SERIES_COUNT):
         if abort_requested():
@@ -101,9 +104,9 @@ def browse_favorite_series():
 @plugin.route('/add_to_library/<series_id>')
 def add_to_library(series_id):
     items = library_items()
+    scraper = get_scraper()
     if series_id not in items:
         items.append(series_id)
-        scraper = get_scraper()
         scraper.add_series(series_id)
     plugin.set_setting('update-library', True)
 
