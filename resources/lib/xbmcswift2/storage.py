@@ -87,7 +87,7 @@ class Storage(DictMixin):
         self.expire_cache = {}
         self.conn = None
 
-    def _connect(self):
+    def _connect(self, check_same_thread=False):
         log.debug("Opening Sqlite table %r in %s" % (self.tablename, self.filename))
         filename = encode_fs(self.filename)
         if self.flag == 'n':
@@ -98,9 +98,9 @@ class Storage(DictMixin):
             raise RuntimeError('Error! The directory does not exist, %s' % self.filename)
 
         if self.autocommit:
-            self.conn = sqlite3.connect(self.filename, isolation_level=None)
+            self.conn = sqlite3.connect(self.filename, isolation_level=None, check_same_thread=check_same_thread)
         else:
-            self.conn = sqlite3.connect(self.filename)
+            self.conn = sqlite3.connect(self.filename, check_same_thread=check_same_thread)
         try:
             self._execute(self.CREATE_TABLE % self.tablename)
             self._execute(self.CREATE_INDEX % self.tablename)

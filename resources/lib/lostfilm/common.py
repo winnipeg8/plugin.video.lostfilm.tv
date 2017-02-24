@@ -106,7 +106,11 @@ def episode_label(e, same_series=False):
     else:
         label += tf.color(e.episode_title, color)
     if e.original_title and plugin.get_setting('show-original-title', bool):
-        label += u" / " + e.original_title.decode("utf-8")
+        try:
+            title = e.original_title.decode("utf-8")
+        except UnicodeDecodeError:
+            title = 'weird encoding'
+        label += " / " + title
     return label
 
 
@@ -271,6 +275,10 @@ def series_cache():
     return plugin.get_storage('series.db', 24 * 60 * 7, cached=False)
 
 
+def series_ids_cache():
+    return plugin.get_storage('series_ids.db', 24 * 60 * 7, cached=False)
+
+
 def library_items():
     return plugin.get_storage().setdefault('library_items', [])
 
@@ -289,7 +297,7 @@ def get_scraper():
     return LostFilmScraper(login=plugin.get_setting('login', unicode),
                            password=plugin.get_setting('password', unicode),
                            cookie_jar=plugin.addon_data_path('cookies'),
-                           series_ids_db=plugin.addon_data_path('series_ids'),
+                           series_ids_cache=series_ids_cache(),
                            xrequests_session=xrequests_session(),
                            max_workers=BATCH_SERIES_COUNT,
                            series_cache=series_cache(),
