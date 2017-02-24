@@ -167,11 +167,10 @@ class LostFilmScraper(AbstractScraper):
             self.authorize()
 
     def get_torrent_links(self, series_id, season_number, episode_number):
-        doc = self.fetch(self.BASE_URL + '/v_search.php', {
-            'c': series_id, 's': season_number, 'e': episode_number
-        })
-
-        doc = self.fetch(doc.find('a').attr('href'))
+        doc = self.fetch(self.BASE_URL + '/v_search.php',
+                         {'c': series_id, 's': season_number, 'e': episode_number},
+                         forced_encoding='utf-8')
+        doc = self.fetch(doc.find('a').attr('href'), forced_encoding='utf-8')
         links_list = doc.find('div', {'class': 'inner-box--list'})
         link_blocks = links_list.find('div', {'class': 'inner-box--item'})
 
@@ -206,10 +205,12 @@ class LostFilmScraper(AbstractScraper):
         else:
             return False
 
-    def fetch(self, url, params=None, data=None, json_req=False, **request_params):
+    def fetch(self, url, params=None, data=None, json_req=False, forced_encoding=None, **request_params):
         self.response = super(LostFilmScraper, self).fetch(url, params, data, **request_params)
         encoding = self.response.encoding
-        if encoding == 'ISO-8859-1':
+        if forced_encoding:
+            encoding = forced_encoding
+        elif encoding == 'ISO-8859-1':
             encoding = 'windows-1251'
         if json_req:
             return self.response.json()['data']
