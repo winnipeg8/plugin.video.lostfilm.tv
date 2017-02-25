@@ -173,6 +173,9 @@ def itemify_common(s):
             'plot': s.plot,
             'rating': None,
             'studio': s.country,
+            'castandrole': s.actors if s.actors else None,
+            'writer': " / ".join(s.writers) if s.writers else None,
+            'director': " / ".join(s.directors) if s.directors else None,
             'genre': " / ".join(s.genres) if s.genres else None,
             'tvshowtitle': s.title,
             'year': s.year,
@@ -368,7 +371,7 @@ def update_library():
         medias = []
         for series_id, episodes in series_episodes.iteritems():
             medias.extend(library.Episode(folder=e.series_title, title=e.episode_title,
-                                          season_number=e.season_number, episode_number=e.episode_numbers,
+                                          season_number=e.season_number, episode_number=e.episode_number,
                                           url=episode_url(e), time_added=e.release_date,
                                           episode=e)
                           for e in episodes if not e.is_complete_season)

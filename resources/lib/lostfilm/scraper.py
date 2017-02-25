@@ -18,7 +18,8 @@ FULL_SEASON_TORRENT_NUMBER = 999
 
 
 class Series(namedtuple('Series', ['id', 'title', 'original_title', 'country', 'year', 'genres',
-                                   'image', 'icon', 'poster', 'plot', 'seasons_count', 'episodes_count'])):
+                                   'image', 'icon', 'poster', 'plot', 'actors', 'directors', 'writers',
+                                   'seasons_count', 'episodes_count'])):
     pass
 
 
@@ -44,20 +45,6 @@ class Episode(namedtuple('Episode', ['series_id', 'series_title', 'season_number
     @property
     def is_complete_season(self):
         return (self.episode_number == FULL_SEASON_TORRENT_NUMBER) or (self.season_number == FULL_SEASON_TORRENT_NUMBER)
-
-    @property
-    def is_multi_episode(self):
-        return False
-        # "-" in self.episode_number
-        # need to handle multiple episodes
-
-    @property
-    def episode_numbers(self):
-        if self.is_multi_episode:
-            start, end = self.episode_number.split("-", 2)
-            return range(int(start), int(end) + 1)
-        else:
-            return [int(self.episode_number)]
 
 
 class Quality(Attribute):
@@ -217,6 +204,21 @@ class LostFilmScraper(AbstractScraper):
         else:
             return HtmlDocument.from_string(self.response.content, encoding)
 
+    def fetch_crew(self, series_id, crew_type):
+        doc = self.fetch(self.BASE_URL + "/series/%s/cast/type_%s" %
+                         (self.series_web_ids_dict[str(series_id)], crew_type))
+        info = doc.find('div', {'class': 'text-block persons'}).text
+        return info.replace('\t', '').replace('\r', '').split('\n\n\n\n')[1:] or None
+
+    def fetch_plot(self, series_id, season_number, episode_number):
+        doc = self._get_episode_doc(series_id, season_number, episode_number)
+        info_and_plot = doc.find('div', {'class': 'text-block description'}).text
+        if len(info_and_plot) != 0:
+            plot = info_and_plot.split('Описание')[-1].strip(' \t\n\r')
+            return plot.split('\u2026')[0].strip()
+        else:
+            return None
+
     def _get_series_doc(self, series_id):
         return self.fetch(self.BASE_URL + "/series/%s" % self.series_web_ids_dict[str(series_id)])
 
@@ -240,23 +242,33 @@ class LostFilmScraper(AbstractScraper):
             image = series_image_url(series_id)
             icon = series_icon_url(series_id)
             plot = self.get_series_plot(series_id, doc)
-
             studio_genre_premiere = doc.find('div', {'class': 'details-pane'}).text
             res = re.search('Страна:([\t\r\n]+)(.+)', studio_genre_premiere)
             country = res.group(0).split()[-1] if res else None
             res = re.search('Премьера:( .+)', studio_genre_premiere)
             year = res.group(0).split()[-1] if res else None
-            res = re.search('Жанр: (.+)\r\n', studio_genre_premiere)
-            genres = res.group(1).split(', ') if res else None
-
+            res = re.search('Жанр: (\r\n)+((.+)[, ]?\r\n)+', studio_genre_premiere)
+            genres = res.group(0).split(', ') if res else None
+            if genres is not None:
+                genres = [g.split()[-1] for g in genres if (len(g) > 3 and ':' not in g)]
+            actors = self.fetch_crew(series_id, 1)
+            if actors is not None:
+                actors = [(actor.strip().split('\n')[2], actor.strip().split('\n')[-1])
+                          for actor in actors if len(actor.strip()) > 3]
+            directors = self.fetch_crew(series_id, 2)
+            if directors is not None:
+                directors = [director.strip().split('\n')[2] for director in directors]
+            writers = self.fetch_crew(series_id, 4)
+            if writers is not None:
+                writers = [writer.strip().split('\n')[2] for writer in writers]
             counter = self._get_episodes_doc(series_id)
             body = counter.find('div', {'class': 'series-block'})
             episodes_count = len(body.find('td', {'class': 'zeta'}))
             seasons_count = len(body.find('div', {'class': 'movie-details-block'}))
-            poster = poster_url(series_id, seasons_count)
+            poster = season_poster_url(series_id, seasons_count)
 
             series = Series(series_id, series_title, original_title, country, year, genres,
-                            image, icon, poster, plot, seasons_count, episodes_count)
+                            image, icon, poster, plot, actors, directors, writers, seasons_count, episodes_count)
             self.log.info("Parsed '%s' series info successfully" % series_title)
             self.log.debug(repr(series).decode("utf-8"))
 
@@ -319,7 +331,7 @@ class LostFilmScraper(AbstractScraper):
                     episode_number = FULL_SEASON_TORRENT_NUMBER
                     episode_title = '%dй Сезон Полностью' % season_number
                     orig_title = 'Full Season %d' % season_number
-                    poster = poster_url(series_id, season_number)
+                    poster = season_poster_url(series_id, season_number)
                     season = Episode(series_id, series_title, season_number, episode_number,
                                      episode_title, orig_title, None, icon, poster, image,
                                      series_info, False)
@@ -482,15 +494,6 @@ class LostFilmScraper(AbstractScraper):
         params = {'act': 'serial', 'type': 'follow', 'id': series_id}
         self.fetch(self.LOGIN_URL, data=params)
 
-    def fetch_plot(self, series_id, season_number, episode_number):
-        doc = self._get_episode_doc(series_id, season_number, episode_number)
-        info_and_plot = doc.find('div', {'class': 'text-block description'}).text
-        if len(info_and_plot) != 0:
-            plot = info_and_plot.split('Описание')[-1].strip(' \t\n\r')
-            return plot.split('\u2026')[0].strip()
-        else:
-            return None
-
 
 def parse_onclick(s):
     res = re.findall("PlayEpisode\('([^']+)','([^']+)','([^']+)'\)", s)
@@ -504,12 +507,12 @@ def parse_onclick(s):
         return 0, 0, ""
 
 
-def poster_url(s_id, season=1):
-    return 'http://static.lostfilm.tv/Images/%s/Posters/shmoster_s%s.jpg' % (s_id, season)
-
-
 def episode_poster_url(s_id, season_number, episode_number):
     return 'http://static.lostfilm.tv/Images/%s/Posters/e_%s_%s.jpg' % (s_id, season_number, episode_number)
+
+
+def season_poster_url(s_id, season=1):
+    return 'http://static.lostfilm.tv/Images/%s/Posters/shmoster_s%s.jpg' % (s_id, season)
 
 
 def series_icon_url(s_id):
