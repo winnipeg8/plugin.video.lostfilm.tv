@@ -248,9 +248,9 @@ class LostFilmScraper(AbstractScraper):
             res = re.search('Премьера:( .+)', studio_genre_premiere)
             year = res.group(0).split()[-1] if res else None
             res = re.search('Жанр: (\r\n)+((.+)[, ]?\r\n)+', studio_genre_premiere)
-            genres = res.group(0).split(', ') if res else None
+            genres = re.split('; |, |\*|\n', res.group(0)) if res else None
             if genres is not None:
-                genres = [g.split()[-1] for g in genres if (len(g) > 3 and ':' not in g)]
+                genres = [g.strip() for g in genres if (len(g) > 3 and ':' not in g)]
             actors = self.fetch_crew(series_id, 1)
             if actors is not None:
                 actors = [(actor.strip().split('\n')[2], actor.strip().split('\n')[-1])
