@@ -72,6 +72,7 @@ class LostFilmScraper(AbstractScraper):
         super(LostFilmScraper, self).__init__(xrequests_session, cookie_jar)
         self.series_cache = series_cache if series_cache is not None else {}
         self.series_web_ids_dict = series_ids_cache if series_ids_cache is not None else {}
+        self.watched_episodes = self.get_watched_episodes()
         self.max_workers = max_workers
         self.response = None
         self.login = login
@@ -118,6 +119,7 @@ class LostFilmScraper(AbstractScraper):
         return self.series_web_ids_dict.keys()
 
     def get_favorite_series(self):
+        self.ensure_authorized()
         skip = 0
         ids = []
         prev_ids = []
@@ -135,6 +137,27 @@ class LostFilmScraper(AbstractScraper):
             ids += ids_incr
 
         return ids
+
+    def get_watched_episodes(self):
+        self.ensure_authorized()
+        doc = self.fetch(self.BASE_URL + '/my/type_0')
+        series_list = doc.find('div', {'class': 'serials-list-box'})
+        series = series_list.find('div', {'class': 'serial-box'})
+        _ids = []
+        for s in series:
+            _id = int(s.find('img', {'class': 'avatar'}).attrs('src')[0].split('/')[-3])
+            _ids.append(_id)
+        watched_episodes = {}
+        for _id in _ids:
+            watched_episodes[_id] = self.parse_watched_response(_id)
+        return watched_episodes
+
+    def is_watched(self, series_id, episode_number, season_number):
+        answer = False
+        if series_id in self.watched_episodes.keys():
+            if (episode_number, season_number) in self.watched_episodes[series_id]:
+                answer = True
+        return answer
 
     def authorize(self):
         with Timer(logger=self.log, name='Authorization'):
@@ -312,7 +335,10 @@ class LostFilmScraper(AbstractScraper):
 
         doc = self._get_episodes_doc(series_id)
         series_info = self.get_series_plot(series_id)
-        watched_episodes = self.parse_watched_response(series_id)
+        if series_id in self.watched_episodes.keys():
+            watched_episodes = self.watched_episodes[series_id]
+        else:
+            watched_episodes = []
         episodes = []
         need_plots = plugin.get_setting('fetch-info', bool)
         season_idx_counter = None
@@ -438,11 +464,7 @@ class LostFilmScraper(AbstractScraper):
             images = [url.replace('/Posters/image', '/Posters/poster') for url in icons]
             for i in range(len(series_ids)):
                 posters.append(episode_poster_url(series_ids[i], season_numbers[i], episode_numbers[i]))
-                if (season_numbers[i], episode_numbers[i]) in self.parse_watched_response(series_ids[i]):
-                    watched.append(True)
-                else:
-                    watched.append(False)
-
+                watched.append(self.is_watched(series_ids[i], season_numbers[i], episode_numbers[i]))
             if need_plots:
                 for i in range(len(series_ids)):
                     plot = self.fetch_plot(series_ids[i], season_numbers[i], episode_numbers[i])

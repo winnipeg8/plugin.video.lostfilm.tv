@@ -114,9 +114,9 @@ def add_to_library(series_id):
 @plugin.route('/remove_from_library/<series_id>')
 def remove_from_library(series_id):
     items = library_items()
+    scraper = get_scraper()
     if series_id in items:
         items.remove(series_id)
-        scraper = get_scraper()
         scraper.add_series(series_id)
     library_new_episodes().remove_by(series_id=series_id)
     plugin.set_setting('update-library', True)
