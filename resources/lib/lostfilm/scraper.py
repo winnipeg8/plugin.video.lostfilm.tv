@@ -72,12 +72,12 @@ class LostFilmScraper(AbstractScraper):
         super(LostFilmScraper, self).__init__(xrequests_session, cookie_jar)
         self.series_cache = series_cache if series_cache is not None else {}
         self.series_web_ids_dict = series_ids_cache if series_ids_cache is not None else {}
-        self.watched_episodes = self.get_watched_episodes()
         self.max_workers = max_workers
         self.response = None
         self.login = login
         self.password = password
         self.has_more = None
+        self.watched_episodes = self.get_watched_episodes()
         self.anonymized_urls = anonymized_urls if anonymized_urls is not None else []
         self.session.headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; WOW64) ' \
                                              'AppleWebKit/537.36 (KHTML, like Gecko) ' \
@@ -152,12 +152,46 @@ class LostFilmScraper(AbstractScraper):
             watched_episodes[_id] = self.parse_watched_response(_id)
         return watched_episodes
 
+    def parse_watched_response(self, series_id):
+        self.ensure_authorized()
+        data = {'act': 'serial', 'type': 'getmarks', 'id': series_id}
+        response = self.fetch(self.LOGIN_URL, data=data)
+        parsed_response = json.loads(response.text)
+        if 'error' in parsed_response and parsed_response['error'] == 2:
+            answer = []
+        else:
+            if len(parsed_response) != 0:
+                parsed_response = parsed_response['data']
+            answer = [(int(r.split('-')[-2]), int(r.split('-')[-1])) for r in parsed_response]
+
+        return answer
+
     def is_watched(self, series_id, episode_number, season_number):
         answer = False
         if series_id in self.watched_episodes.keys():
             if (episode_number, season_number) in self.watched_episodes[series_id]:
                 answer = True
         return answer
+
+    def toggle_watched(self, series_id, season=None, episode=None):
+        self.ensure_authorized()
+        if season is None:
+            episodes = self.get_series_episodes(series_id)
+            for e in episodes:
+                if not e.is_complete_season and not e.watched:
+                    params = {'act': 'serial', 'type': 'markepisode',
+                              'val': '%d-%d-%d' % (series_id, e.season_number, e.episode_number)}
+                    self.fetch(self.LOGIN_URL, data=params)
+        elif season != FULL_SEASON_TORRENT_NUMBER:
+            params = {'act': 'serial', 'type': 'markepisode', 'val': '%d-%d-%d' % (series_id, season, episode)}
+            self.fetch(self.LOGIN_URL, data=params)
+            # else:
+            #      params = {'act': 'serial', 'type': 'markseason', 'val': '%d-%d' % (series_id, season)}
+            #     r = self.fetch(self.LOGIN_URL, data=params)
+
+    def add_series(self, series_id):
+        params = {'act': 'serial', 'type': 'follow', 'id': series_id}
+        self.fetch(self.LOGIN_URL, data=params)
 
     def authorize(self):
         with Timer(logger=self.log, name='Authorization'):
@@ -454,9 +488,20 @@ class LostFilmScraper(AbstractScraper):
             icons = body.find('img', {'class': 'thumb'}).attrs('src')
             series_ids = [int(i.split('/')[4]) for i in icons]
             se = body.find('div', {'class': 'left-part'}).strings
-            season_numbers = [int(s.split(' ')[0]) for s in se]
-            episode_numbers = [int(s.split(' ')[2]) for s in se]
-
+            season_numbers = []
+            episode_numbers = []
+            for s in se:
+                try:  # Special episodes treatment
+                    e_n = int(s.split(' ')[2])
+                except:
+                    e_n = FULL_SEASON_TORRENT_NUMBER
+                try:
+                    s_n = int(s.split(' ')[0])
+                except:
+                    s_n = FULL_SEASON_TORRENT_NUMBER
+                    e_n = int(s.split(' ')[1])
+                season_numbers.append(s_n)
+                episode_numbers.append(e_n)
             plots = []
             posters = []
             watched = []
@@ -481,40 +526,6 @@ class LostFilmScraper(AbstractScraper):
             self.log.info("Got %d episode(s) successfully" % (len(episodes)))
             self.log.debug(repr(episodes).decode("utf-8"))
         return episodes
-
-    def toggle_watched(self, series_id, season=None, episode=None):
-        self.ensure_authorized()
-        if season is None:
-            episodes = self.get_series_episodes(series_id)
-            for e in episodes:
-                if not e.is_complete_season and not e.watched:
-                    params = {'act': 'serial', 'type': 'markepisode',
-                              'val': '%d-%d-%d' % (series_id, e.season_number, e.episode_number)}
-                    self.fetch(self.LOGIN_URL, data=params)
-        elif season != FULL_SEASON_TORRENT_NUMBER:
-            params = {'act': 'serial', 'type': 'markepisode', 'val': '%d-%d-%d' % (series_id, season, episode)}
-            self.fetch(self.LOGIN_URL, data=params)
-            # else:
-            #      params = {'act': 'serial', 'type': 'markseason', 'val': '%d-%d' % (series_id, season)}
-            #     r = self.fetch(self.LOGIN_URL, data=params)
-
-    def parse_watched_response(self, series_id):
-        self.ensure_authorized()
-        data = {'act': 'serial', 'type': 'getmarks', 'id': series_id}
-        response = self.fetch(self.LOGIN_URL, data=data)
-        parsed_response = json.loads(response.text)
-        if 'error' in parsed_response and parsed_response['error'] == 2:
-            answer = []
-        else:
-            if len(parsed_response) != 0:
-                parsed_response = parsed_response['data']
-            answer = [(int(r.split('-')[-2]), int(r.split('-')[-1])) for r in parsed_response]
-
-        return answer
-
-    def add_series(self, series_id):
-        params = {'act': 'serial', 'type': 'follow', 'id': series_id}
-        self.fetch(self.LOGIN_URL, data=params)
 
 
 def parse_onclick(s):
