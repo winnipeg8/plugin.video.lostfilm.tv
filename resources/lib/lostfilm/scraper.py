@@ -52,8 +52,8 @@ class Quality(Attribute):
         return 40208
 
     SD = (0, 'sd')
-    HD_720 = (1, '720', '720p', 'mp4', 'hd')
-    HD_1080 = (2, '1080p', '1080')
+    HD_720 = (1, '720', '720p', 'mp4')
+    HD_1080 = (2, '1080p', '1080', 'hd')
 
     def __lt__(self, other):
         return self.id < other.id
