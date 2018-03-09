@@ -6,4 +6,4 @@
 2) синхронизация просмотренных эпизодов
 3) опциональная подгрузка описаний эпизодов (занимает мноооого времени даже с хорошим соединением)
 
-Репозиторий [здесь](https://github.com/winnipeg8/xbmc.repository/blob/master/repository.winnipeg8/repository.winnipeg8-0.0.1.zip).
+Репозиторий [здесь](https://github.com/winnipeg8/xbmc.repository/blob/master/repository.winnipeg8/repository.winnipeg8-0.0.2.zip).

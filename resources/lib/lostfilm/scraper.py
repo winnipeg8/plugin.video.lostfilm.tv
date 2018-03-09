@@ -162,7 +162,8 @@ class LostFilmScraper(AbstractScraper):
         else:
             if len(parsed_response) != 0:
                 parsed_response = parsed_response['data']
-            answer = [(int(r.split('-')[-2]), int(r.split('-')[-1])) for r in parsed_response]
+            answer = [(int(r[3:6]), int(r[6:9])) for r in parsed_response]
+            self.log.info(series_id)
 
         return answer
 
@@ -410,12 +411,12 @@ class LostFilmScraper(AbstractScraper):
                 titles = episodes_table.find('td', {'class': gamma_class})
                 orig_titles = [str(t) for t in titles.find('span')]
                 titles = [t.split('\n')[0] for t in titles.strings]
-                if len(onclick) < len(titles):
+                if len(onclick)/2 < len(titles):
                     del episode_dates[0], titles[0], orig_titles[0]
                 all_episodes_are_watched = False
                 for i in range(len(episode_dates)):
                     release_date = parse_release_date(episode_dates[i])
-                    full_season_indicator, season_number, episode_number = parse_onclick(onclick[i])
+                    full_season_indicator, season_number, episode_number = parse_onclick(onclick[i*2])
                     episode_title = titles[i]
                     orig_title = orig_titles[i]
 
