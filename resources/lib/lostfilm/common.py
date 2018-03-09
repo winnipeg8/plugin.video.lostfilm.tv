@@ -94,7 +94,10 @@ def episode_label(e, same_series=False):
     """
     label = ""
     if not e.is_complete_season:
-        label += tf.color("%02d.%02d " % (e.season_number, e.episode_number), 'blue')
+        if not e.is_special:
+            label += tf.color("%02d.%02d " % (e.season_number, e.episode_number), 'blue')
+        else:
+            label += tf.color("Special.%02d " % (e.episode_number), 'blue')
     if e in library_new_episodes():
         label += tf.color("* ", NEW_LIBRARY_ITEM_COLOR)
     if e.series_id in library_items() and not same_series:

@@ -44,7 +44,11 @@ class Episode(namedtuple('Episode', ['series_id', 'series_title', 'season_number
 
     @property
     def is_complete_season(self):
-        return (self.episode_number == FULL_SEASON_TORRENT_NUMBER) or (self.season_number == FULL_SEASON_TORRENT_NUMBER)
+        return self.episode_number == FULL_SEASON_TORRENT_NUMBER
+
+    @property
+    def is_special(self):
+        return self.season_number == FULL_SEASON_TORRENT_NUMBER
 
 
 class Quality(Attribute):
@@ -401,7 +405,7 @@ class LostFilmScraper(AbstractScraper):
                         season_idx_counter = len(episodes) - 1
 
                 episodes_table = s.find('table', {'class': 'movie-parts-list'})
-                if episodes_table.attrs('id')[0] == u'season_series_999':
+                if episodes_table.attrs('id')[0][-6:] == u'999999':
                     gamma_class = 'gamma additional'
                 else:
                     gamma_class = 'gamma'
@@ -411,13 +415,15 @@ class LostFilmScraper(AbstractScraper):
                 titles = episodes_table.find('td', {'class': gamma_class})
                 orig_titles = [str(t) for t in titles.find('span')]
                 titles = [t.split('\n')[0] for t in titles.strings]
-                if len(onclick)/2 < len(titles):
+                if len(onclick) / 2 < len(titles):
                     del episode_dates[0], titles[0], orig_titles[0]
                 all_episodes_are_watched = False
                 for i in range(len(episode_dates)):
+
                     release_date = parse_release_date(episode_dates[i])
-                    full_season_indicator, season_number, episode_number = parse_onclick(onclick[i*2])
+                    full_season_indicator, season_number, episode_number = parse_onclick(onclick[i * 2])
                     episode_title = titles[i]
+                    self.log.info(parse_onclick(onclick[i * 2]))
                     orig_title = orig_titles[i]
 
                     if need_plots:
