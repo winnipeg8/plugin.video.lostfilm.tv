@@ -9,16 +9,13 @@
         <setting id="FetchPlot"         type="bool" label="Описание эпизодов"          default="false"/>
         <setting id="UpdateSeries"      type="bool" label="Обновить сериалы новинками" default="true"/>
         <setting id="UpdateFromScratch" type="bool" label="Обновить сериалы полностью" default="false"/>
-        <setting id="Picture"           type="bool" label="Сохранять картинки"         default="false" visible="false"/>
-    </category>
-    <category label="Вид">
         <setting id="Sort"              type="enum" label="Прядок сериалов"   default="0" values="По алфавиту|По дате"/>
         <setting id="Pages"             type="enum" label="Новые серии"       default="1" values="15|30|45|60"/>
-        <setting id="ListView"          type="enum" label="Вид списков"       default="4" values="Не менять|Вид 1|Вид 2|Вид 3|Вид 4|Вид 5|Вид 6|Вид 7|Вид 8|Вид 9|Вид 10|Вид 11|Вид 12"/>
+        <setting id="Picture"           type="bool" label="Сохранять картинки"         default="false" visible="false"/>
     </category>
     <category label="P2P">
         <setting id="Engine"              type="enum"   label="player"          default="1" values="ACE engine|torrent2http"/>
-        <setting id="DownloadDirectory"   type="folder" label="torrent2http cache" visible="eq(-1,1)" option="writeable" default="special://temp/torrent2http"/>
+        <setting id="t2h-cache"           type="folder" label="torrent2http cache" visible="eq(-1,1)" option="writeable" default="special://temp/torrent2http"/>
         <setting id="t2h-listen-port"     type="number" label="Порт для входящих соединений" visible="eq(-2,1)" default="6881" enable="eq(1,false)"/>
         <setting id="t2h-use-random-port" type="bool"   label="Использовать случайный порт" visible="eq(-3,1)"/>
         <setting id="t2h-pre-buffer-mb"   type="slider" label="Загружаемый объем файла до начала просмотра, Мб" visible="eq(-4,1)" default="15" range="5,5,50" option="int"/>

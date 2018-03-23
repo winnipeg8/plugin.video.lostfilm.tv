@@ -73,7 +73,7 @@ main_menu_options = MainMenuOptions(addon, base_url, addon_handle, user_agent, p
 mode, url, dir_, title, episode_id, img, id_, link, file_index, info = parse_queries(addon_query)
 
 if mode is None or mode == "New":
-    if addon.getSetting("UpdateSeries"):
+    if addon.getSetting("UpdateSeries") == "true":
         main_menu_options.update_tvshows()
     main_menu_options.main_screen()
     xbmcplugin.setPluginCategory(addon_handle, plugin_name)
@@ -99,12 +99,6 @@ elif mode == 'OpenTorrent':
     xbmcplugin.addSortMethod(addon_handle, xbmcplugin.SORT_METHOD_LABEL)
     xbmcplugin.endOfDirectory(addon_handle)
 
-elif mode == 'Releases':
-    main_menu_options.release_torrents(episode_id)
-    xbmcplugin.setPluginCategory(addon_handle, plugin_name)
-    xbmcplugin.addSortMethod(addon_handle, xbmcplugin.SORT_METHOD_LABEL)
-    xbmcplugin.endOfDirectory(addon_handle)
-
 if mode == "PlayTorrent":
     main_menu_options.play(url, file_index, episode_id)
 
@@ -113,7 +107,7 @@ if mode == 'Getlist':
     xbmcplugin.setPluginCategory(addon_handle, plugin_name)
     xbmcplugin.endOfDirectory(addon_handle)
     xbmc.sleep(300)
-    xbmc.executebuiltin("Container.SetViewMode(%d)" % int(addon.getSetting("ListView")))
+    # xbmc.executebuiltin("Container.SetViewMode(%d)" % int(addon.getSetting("ListView")))
 
 if mode == "Autoplay":
     main_menu_options.autoplay(episode_id)

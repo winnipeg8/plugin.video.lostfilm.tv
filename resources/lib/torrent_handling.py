@@ -251,7 +251,7 @@ class TorrentOpener:
         if engine == "0":
             self.play_ace(url, ind)
         elif engine == "1":
-            self.play_t2h(url, ind, self.addon.getSetting("DownloadDirectory"))
+            self.play_t2h(url, ind, self.addon.getSetting("t2h-cache"))
         history = self.addon.getSetting("History")
         if history == '':
             history_list = []

@@ -67,6 +67,7 @@ class MainMenuOptions(InfoFetcher):
         return title
 
     def all_tvshows(self):
+        xbmcplugin.setContent(self.addon_handle, 'tvshows')
         tvshows = self.get_tvshows()
         tvshows_fav = self.get_favorites()
         for tvshow in tvshows:
@@ -76,6 +77,7 @@ class MainMenuOptions(InfoFetcher):
                                     "Getlist", tvshow_info, '', len(tvshows))
 
     def lf_favorites(self):
+        xbmcplugin.setContent(self.addon_handle, 'tvshows')
         tvshows = self.get_favorites()
         for tvshow in tvshows:
             tvshow_info = self.get_info(tvshow)
@@ -83,6 +85,7 @@ class MainMenuOptions(InfoFetcher):
                                     "Getlist", tvshow_info, '', len(tvshows))
 
     def main_screen(self):
+        # xbmcplugin.setContent(self.addon_handle, 'episodes')
         self.add_item_on_screen("[B]Все сериалы[/B]", "Serials", {}, "")
         self.add_item_on_screen("[B]Избранные сериалы[/B]", "LF_favorites", {}, "")
         tvshows_fav = self.get_favorites()
@@ -100,7 +103,7 @@ class MainMenuOptions(InfoFetcher):
                                             "Releases", episode, '', 10 * n, series_season_episode_id)
 
     def get_tvshow_episodes(self, tvshow_link):
-        # xbmcplugin.setContent(self.addon_handle, 'episodes')
+        xbmcplugin.setContent(self.addon_handle, 'episodes')
         episodes_list = self.get_episodes(tvshow_link)
         total_episodes = len(episodes_list)
         for episode in episodes_list:
@@ -139,7 +142,7 @@ class MainMenuOptions(InfoFetcher):
                 cover = self.episode_poster_url(tvshow_id, season_n, episode_n)
             else:
                 cover = self.season_poster_url(tvshow_id, season_n)
-            label_info = {'cover': cover, 'title': link_desc, 'episode': episode_n, 'season': season_n}
+            # label_info = {'cover': cover, 'title': link_desc, 'episode': episode_n, 'season': season_n}
             links.append([link_desc, links_href, cover, TorrentLinks(link_quality, size)])
         return links
 
@@ -160,7 +163,6 @@ class MainMenuOptions(InfoFetcher):
                     ind += 1
             except Exception, err:
                 self.logger.log.info('Could not obtain files from the torrent: %s' % err)
-                ind = 0
                 name = torrent['info']['name']
                 listitem = xbmcgui.ListItem(name, iconImage=cover, thumbnailImage=cover)
                 listitem.setProperty('IsPlayable', 'true')
@@ -207,8 +209,8 @@ class MainMenuOptions(InfoFetcher):
 
         if self.addon.getSetting("Quality") != '0' and mode == "Releases":
             listitem.addContextMenuItems([('[B]Выбрать качество[/B]', 'Container.Update("%s")' %
-                                           self.build_url(
-                                               {'mode': 'Releases', 'cse': cse, 'id': tvshow_id, 'link': tvshow_link})),
+                                           self.build_url({'mode': 'SelectQuality', 'cse': cse, 'id': tvshow_id,
+                                                           'link': tvshow_link})),
                                           ('[B]Все серии[/B]', 'Container.Update("%s")' %
                                            self.build_url({'mode': 'Getlist', 'id': tvshow_id, 'link': tvshow_link}))])
             listitem.setProperty('IsPlayable', 'true')

@@ -50,15 +50,35 @@ class InfoFetcher(TorrentOpener):
             return "('0','0','0')"
 
     @staticmethod
-    def find_inclusions(html_string, search_start, search_end):
-        result = []
-        while html_string.find(search_end) > 0:
-            s = html_string.find(search_start)
-            e = html_string.find(search_end)
-            i = html_string[s:e]
-            result.append(i)
-            html_string = html_string[e + 2:]
-        return result
+    def parse_ru_date(ru_date):
+        dd, mm, yyyy = ru_date.split()
+        if u'январ' in mm:
+            mm = '01'
+        elif u'феврал' in mm:
+            mm = '02'
+        elif u'март' in mm:
+            mm = '03'
+        elif u'апрел' in mm:
+            mm = '04'
+        elif u'ма' in mm:
+            mm = '05'
+        elif u'июн' in mm:
+            mm = '06'
+        elif u'июл' in mm:
+            mm = '07'
+        elif u'август' in mm:
+            mm = '08'
+        elif u'сентяб' in mm:
+            mm = '09'
+        elif u'октяб' in mm:
+            mm = '10'
+        elif u'нояб' in mm:
+            mm = '11'
+        elif u'декаб' in mm:
+            mm = '12'
+        else:
+            return None
+        return '%02d.%s.%s' % (int(dd), mm, yyyy)
 
     def lostfilm_login(self):
         try:
@@ -168,7 +188,6 @@ class InfoFetcher(TorrentOpener):
             episode_url = self.httpSiteUrl + tvshow_link + '/additional/episode_' + episode_number
         else:
             episode_url = self.httpSiteUrl + tvshow_link + '/season_' + season_number + '/episode_' + episode_number
-        # self.logger.log.info(episode_url)
         try:
             desc = self.xbmc_path(self.series_db.get_inf_db(sid))
             if update_plot:
@@ -178,61 +197,46 @@ class InfoFetcher(TorrentOpener):
             self.logger.log.info('Episode description is not in the database, downloading from the Internet: %s' % err)
             return self.fetch_plot(sid, tvshow_link, episode_url)
 
-    def get_cast(self, tvshow_link, roles=False):
+    def get_cast(self, tvshow_link, names_only=True):
+        max_actors = 20
         cast_url = self.httpSiteUrl + tvshow_link + '/cast/type_1'
         hp = self.send_get_request(cast_url)
-        hp = hp[hp.find('<div class="center-block margin-left">'):]
-        ss = '<a href="/persons'
-        es = '</a>'
-        cast_search = self.find_inclusions(hp, ss, es)
+        tmp = HtmlDocument.from_string(hp).find('div', {'class': 'text-block persons'})
+        cast_urls = tmp.find('a')
         cast_result = []
-        n = 0
-        for cast_item in cast_search:
-            n += 1
-            actor = ''
-            role = ''
-            img = ''
-            cast_url = ''
-            cast_details = cast_item.splitlines()
-            for cast_detail in cast_details:
-                if 'name-ru' in cast_detail:
-                    actor = cast_detail[cast_detail.find('">') + 2:cast_detail.find('</div>')]
-                if 'role-ru' in cast_detail:
-                    role = cast_detail[cast_detail.find('">') + 2:cast_detail.find('</div>')]
-                if 'autoload' in cast_detail:
-                    img = 'http:' + cast_detail[cast_detail.find('//static.'):cast_detail.find('" />')]
-                if '/persons' in cast_detail:
-                    cast_url = self.httpSiteUrl + cast_detail[cast_detail.find('/persons'):cast_detail.find('" class=')]
-            if roles:
-                cast_result.append(actor + ' | ' + role)
+        i = 0
+        while i < min(max_actors, len(cast_urls)):
+            name = cast_urls[i].find('div', {'class': 'name-en'}).text
+            role = cast_urls[i].find('div', {'class': 'role-en'}).text
+            image = 'http:' + cast_urls[i].find('img').attr('autoload') \
+                if cast_urls[i].find('img').attr('autoload') else ''
+            if names_only:
+                cast_result.append((name, role))
             else:
-                cast_result.append({'actor': actor, 'role': role, 'cover': img, 'url': cast_url})
-            if n > 8:
-                return cast_result
+                cast_result.append({'actor': name, 'role': role,
+                                    'cover': image, 'url': self.httpSiteUrl + cast_urls[i].attr('href')})
+            i += 1
         return cast_result
 
-    def get_director(self, link):
-        director_url = self.httpSiteUrl + link + '/cast/type_2'
+    def get_director(self, tvshow_link, names_only=True):
+        max_directors = 20
+        director_url = self.httpSiteUrl + tvshow_link + '/cast/type_2'
         hp = self.send_get_request(director_url)
-        hp = hp[hp.find('<div class="center-block margin-left">'):]
-        ss = '<a href="/persons'
-        es = '</a>'
-        director_search = self.find_inclusions(hp, ss, es)
-        director = ''
-        for director in director_search:
-            img = ''
-            director_url = ''
-            director_details = director.splitlines()
-            for detail in director_details:
-                if 'name-ru' in detail:
-                    director += detail[detail.find('">') + 2:detail.find('</div>')] + ", "
-                if 'autoload' in detail:
-                    img = 'http:' + detail[detail.find('//static.'):detail.find('" />')]
-                if '/persons' in detail:
-                    director_url = self.httpSiteUrl + detail[detail.find('/persons'):detail.find('" class=')]
-                if len(director) > 30:
-                    return director
-        return director
+        tmp = HtmlDocument.from_string(hp).find('div', {'class': 'text-block persons'})
+        directors_urls = tmp.find('a')
+        directors_list = []
+        i = 0
+        while i < min(max_directors, len(directors_urls)):
+            name = directors_urls[i].find('div', {'class': 'name-en'}).text
+            image = 'http:' + directors_urls[i].find('img').attr('autoload') \
+                if directors_urls[i].find('img').attr('autoload') else ''
+            if names_only:
+                directors_list.append(name)
+            else:
+                directors_list.append({'director': name, 'cover': image,
+                                       'url': self.httpSiteUrl + directors_urls[i].attr('href')})
+            i += 1
+        return directors_list
 
     def get_info(self, link):
         if self.addon.getSetting('UpdateFromScratch') == 'true':
@@ -242,12 +246,10 @@ class InfoFetcher(TorrentOpener):
             info = eval(self.xbmc_path(self.series_db.get_inf_db(link)))
         except Exception, err:
             self.logger.log.info('Series info is not in the database, downloading from the Internet: %s' % err)
-            # try:
+
             info_url = self.httpSiteUrl + link
             info_html = self.send_get_request(info_url)
-            info_search = info_html.splitlines()
-
-            info_and_plot = HtmlDocument.from_string(self.send_get_request(self.httpSiteUrl + link))
+            info_and_plot = HtmlDocument.from_string(info_html)
             info_and_plot = info_and_plot.find('div', {'class': 'text-block description'}).text
             plot = info_and_plot.split(u'Описание')[-1].strip(' \t\n\r')
             if len(plot.split(u'Сюжет')) == 2:
@@ -262,36 +264,42 @@ class InfoFetcher(TorrentOpener):
             year = ''
             genre = ''
             premiered = ''
-            id_ = '0'
+            tvshow_id = '0'
 
-            for info_search_ in info_search:
+            info_html = info_html.splitlines()
+            for search_line in info_html:
                 try:
-                    if 'title-ru' in info_search_:
-                        ru_title = info_search_[info_search_.find('">') + 2:info_search_.find('</div>')]
-                    if 'title-en' in info_search_:
-                        en_title = info_search_[info_search_.find('">') + 2:info_search_.find('</div>')]
-                    if 'сериалы телеканала' in info_search_:
-                        studio = info_search_[info_search_.find('">') + 2:info_search_.find('</a>')]
-                    if 'Перейти к первой серии' in info_search_:
-                        year = info_search_[info_search_.find('</a>') - 4:info_search_.find('</a>')]
-                    if 'Перейти к первой серии' in info_search_:
-                        premiered = info_search_[info_search_.find('">') + 2:info_search_.find('</a>')]
-                    if 'сериалы жанра' in info_search_:
-                        genre += info_search_[info_search_.find('">') + 2:info_search_.find('</a>')] + ", "
-                    if 'main_poster' in info_search_:
-                        id_ = info_search_[info_search_.find('/Images/') + 8:info_search_.find('/Posters/')]
+                    if 'title-ru' in search_line:
+                        ru_title = HtmlDocument.from_string(search_line).find('div').text
+                    if 'title-en' in search_line:
+                        en_title = HtmlDocument.from_string(search_line).find('div').text
+                    if 'сериалы телеканала' in search_line:
+                        studio = search_line[search_line.find('">') + 2:search_line.find('</a>')] + ", "
+                    if 'Перейти к первой серии' in search_line:
+                        premiered = HtmlDocument.from_string(search_line).find('a').text
+                        premiered = self.parse_ru_date(premiered)
+                        year = int(premiered[-4:])
+                    if 'сериалы жанра' in search_line:
+                        genre += search_line[search_line.find('">') + 2:search_line.find('</a>')] + ", "
+                    if 'main_poster' in search_line:
+                        tvshow_id = search_line[search_line.find('/Images/') + 8:search_line.find('/Posters/')]
                 except Exception, err:
                     self.logger.log.info('Error in info parsing: %s' % err)
                     pass
 
-            try:
-                castandrole = self.get_cast(link, True)
-            except Exception, err:
-                self.logger.log.info('Could not get cast and roles: %s' % err)
-                castandrole = []
+            if genre != '':
+                genre = genre[:-2]
+            if studio != '':
+                studio = studio[:-2]
 
             try:
-                director = self.get_director(link)
+                cast_and_role = self.get_cast(link, names_only=True)
+            except Exception, err:
+                self.logger.log.info('Could not get cast and roles: %s' % err)
+                cast_and_role = []
+
+            try:
+                director = self.get_director(link, names_only=True)
             except Exception, err:
                 self.logger.log.info('Could not get director: %s' % err)
                 director = ''
@@ -304,11 +312,11 @@ class InfoFetcher(TorrentOpener):
                     "genre": genre,
                     "studio": studio,
                     "director": director,
-                    "castandrole": castandrole,
+                    "castandrole": cast_and_role,
                     "plot": plot,
-                    "id": id_,
-                    "link": link
-                    }
+                    "id": tvshow_id,
+                    "link": link,
+                    "mediatype": "tvshow"}
 
             self.series_db.add_to_db(link, repr(info))
 
@@ -338,9 +346,10 @@ class InfoFetcher(TorrentOpener):
                 info['episode'] = episode_number.encode('ascii', 'ignore')
                 info['season'] = season_number.encode('ascii', 'ignore')
                 info['id'] = tvshow_number.encode('ascii', 'ignore')
+                info['aired'] = episode.find('div', {'class': 'beta'}).text.split(':')[-1].strip()
+                info['mediatype'] = 'episode'
                 if self.addon.getSetting("FetchPlot") == 'true':
                     info['plot'] = self.get_plot_episode(link, season_number, episode_number)
-                # date, cover, fanart
                 episodes_result.append(info)
 
         return episodes_result
@@ -410,6 +419,7 @@ class InfoFetcher(TorrentOpener):
             if len(cse) > 0:
                 cse = self.parse_onclick(cse[0])
                 tmp, info_s['season'], info_s['episode'] = eval(cse)
+                info_s['mediatype'] = 'season'
                 episodes_list.append((info_s, cse))
 
             episodes = season.find('tr')
@@ -431,7 +441,8 @@ class InfoFetcher(TorrentOpener):
                         info_ep['title'] = title
                         info_ep['episode'] = episode_
                         info_ep['season'] = season_
-                        info_ep['premiered'] = premiered
+                        info_ep['aired'] = premiered
+                        info_ep['mediatype'] = 'episode'
 
                         if episode_ != "999" and self.addon.getSetting("FetchPlot") == 'true':
                             info_ep['plot'] = self.get_plot_episode(tvshow_link, season_, episode_)
@@ -488,7 +499,6 @@ class InfoFetcher(TorrentOpener):
             url = self.xbmc_path(self.httpSiteUrl + '/ajaxik.php')
             post = self.post_query({'act': 'serial', 'type': 'search', 'o': n * tvshows_per_page, 's': 2, 't': 99})
             ajax = self.get_html(url, post, 'http://www.lostfilm.tv')
-            # self.logger.log.info(ajax)
             d = eval(
                 ajax.replace('\\/', '/').replace(':"', ':u"').replace("true", '"true"').replace("false", '"false"').
                 replace("null", '"0"').replace("title_orig", 'originaltitle'))
